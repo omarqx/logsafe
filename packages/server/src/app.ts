@@ -4,6 +4,7 @@ import type { Db } from './db.js'
 import { normalizeEvent, type NormalizedEvent } from './normalize.js'
 import { insertBatch, type StoredEvent } from './ingest.js'
 import { queryEvents, listSessions, getSession, deleteSession, type EventFilters } from './queries.js'
+import { SseHub } from './sse.js'
 
 export const MAX_BATCH = 1000
 export const BODY_LIMIT = 5 * 1024 * 1024
@@ -53,6 +54,17 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     }
   })
 
+  const hub = new SseHub()
+  const afterInsert = (events: StoredEvent[]): void => {
+    const bySession = new Map<string, StoredEvent[]>()
+    for (const ev of events) {
+      const list = bySession.get(ev.session_id)
+      if (list) list.push(ev)
+      else bySession.set(ev.session_id, [ev])
+    }
+    for (const [sid, list] of bySession) hub.publish(sid, list)
+  }
+
   app.post('/v1/log', (req, reply) => {
     const body = req.body
     const t = now()
@@ -77,13 +89,6 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     afterInsert(stored)
     return reply.code(202).send({ accepted: 1, rejected: 0 })
   })
-
-  // Task 7 (SSE) replaces this no-op with hub.publish.
-  let afterInsert: (events: StoredEvent[]) => void = () => {}
-  const setAfterInsert = (fn: (events: StoredEvent[]) => void): void => {
-    afterInsert = fn
-  }
-  void setAfterInsert // referenced by Task 7
 
   app.get('/api/health', () => ({ ok: true }))
 
@@ -126,6 +131,52 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     const { id } = req.params as { id: string }
     if (!deleteSession(db, id)) return reply.code(404).send({ error: 'session not found' })
     return reply.code(204).send()
+  })
+
+  app.get('/api/sessions/:id/stream', (req, reply) => {
+    const { id } = req.params as { id: string }
+    const q = req.query as Record<string, unknown>
+    const afterSeq = num(q.after_seq) ?? 0
+
+    reply.hijack()
+    reply.raw.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache',
+      connection: 'keep-alive',
+      'access-control-allow-origin': '*',
+    })
+    // Node buffers headers until the first body write; flush now so clients
+    // (and this route's own tests) see the response immediately even when
+    // there's nothing to replay yet.
+    reply.raw.flushHeaders()
+
+    let lastSeq = afterSeq
+    const write = (ev: StoredEvent): void => {
+      if (ev.seq <= lastSeq) return
+      reply.raw.write(`event: log\ndata: ${JSON.stringify(ev)}\n\n`)
+      lastSeq = ev.seq
+    }
+
+    // Subscribe before replay; ingest and replay are both synchronous on this
+    // event loop, so nothing can interleave, and the seq guard in write()
+    // makes any overlap harmless anyway.
+    const unsubscribe = hub.subscribe(id, (events) => {
+      for (const ev of events) write(ev)
+    })
+
+    let after = afterSeq
+    for (;;) {
+      const { events, next_after_seq } = queryEvents(db, id, { after_seq: after, limit: 5000 })
+      for (const ev of events) write(ev)
+      if (next_after_seq === null) break
+      after = next_after_seq
+    }
+
+    const hb = setInterval(() => reply.raw.write(': hb\n\n'), 15_000)
+    req.raw.on('close', () => {
+      clearInterval(hb)
+      unsubscribe()
+    })
   })
 
   return app
