@@ -1,0 +1,194 @@
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/400-italic.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
+
+:root {
+  --bg: #0a0d0b;
+  --bg-raise: #0e1210;
+  --txt: #b6c2b8;
+  --dim: #5d6b60;
+  --faint: #37423a;
+  --line: #1a221c;
+  --phos: #4af0a8; /* phosphor green — active/ok/accent */
+  --amber: #ffb454; /* warn */
+  --err: #ff5c53; /* error */
+  --cyan: #5cc9f5; /* source: webapp */
+  --violet: #c792ea; /* source: api */
+  --slate: #8fa3b8; /* source: worker/other */
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* single-row height used by virtualized log streams / lists */
+  --row-h: 20px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* faint scanlines */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 3px);
+}
+
+.frame {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── header ─────────────────────────────── */
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.logo {
+  color: var(--phos);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.logo .cursor {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  background: var(--phos);
+  margin-left: 2px;
+  animation: blink 1.1s steps(1) infinite;
+  vertical-align: -1px;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.crumb {
+  color: var(--dim);
+}
+
+.crumb b {
+  color: var(--txt);
+  font-weight: 500;
+}
+
+header .meta {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+header .meta em {
+  font-style: normal;
+  color: var(--dim);
+}
+
+/* ── command / filter line ──────────────── */
+.cmdline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raise);
+}
+
+.prompt {
+  color: var(--phos);
+}
+
+.cmd-hint {
+  color: var(--faint);
+}
+
+.chip {
+  border: 1px solid var(--faint);
+  border-radius: 2px;
+  padding: 1px 7px;
+  color: var(--dim);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.chip.on {
+  border-color: var(--phos);
+  color: var(--phos);
+}
+
+.chip.on-err {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.chip .x {
+  color: var(--faint);
+  margin-left: 4px;
+}
+
+.cmdline .right {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+kbd {
+  border: 1px solid var(--faint);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 10px;
+  color: var(--dim);
+  font-family: inherit;
+}
+
+/* ── footer ─────────────────────────────── */
+footer {
+  display: flex;
+  gap: 18px;
+  padding: 8px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 11px;
+  background: var(--bg-raise);
+}
+
+footer .k {
+  color: var(--dim);
+}
+
+footer .right {
+  margin-left: auto;
+}
