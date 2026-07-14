@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   sources     TEXT NOT NULL DEFAULT '[]'
 );
 CREATE TABLE IF NOT EXISTS events (
-  seq         INTEGER PRIMARY KEY,
+  seq         INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id  TEXT NOT NULL,
   ts          INTEGER NOT NULL,
   received_at INTEGER NOT NULL,

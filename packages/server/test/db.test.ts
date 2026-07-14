@@ -10,7 +10,9 @@ describe('openDb', () => {
     const tables = db
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`)
       .all() as { name: string }[]
-    expect(tables.map((t) => t.name)).toEqual(['events', 'sessions'])
+    // sqlite_sequence is an internal bookkeeping table SQLite creates
+    // automatically for AUTOINCREMENT columns (see events.seq in db.ts).
+    expect(tables.map((t) => t.name)).toEqual(['events', 'sessions', 'sqlite_sequence'])
     // :memory: reports 'memory'; file dbs report 'wal'
     expect(['wal', 'memory']).toContain(db.pragma('journal_mode', { simple: true }))
   })

@@ -54,8 +54,14 @@ describe('POST /v1/log', () => {
     expect(res.json()).toEqual({ accepted: 1, rejected: 0 })
   })
 
+  it('parses bodies via the catch-all parser as JSON (unlisted content type)', async () => {
+    const res = await post(JSON.stringify({ msg: 'octet stream', session_id: 's1' }), 'application/octet-stream')
+    expect(res.statusCode).toBe(202)
+    expect(res.json()).toEqual({ accepted: 1, rejected: 0 })
+  })
+
   it('malformed JSON through the catch-all parser returns 400, not 500', async () => {
-    const res = await post('not json at all', 'application/x-www-form-urlencoded')
+    const res = await post('not json at all', 'application/octet-stream')
     expect(res.statusCode).toBe(400)
   })
 

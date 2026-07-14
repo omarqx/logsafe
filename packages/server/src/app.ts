@@ -238,8 +238,12 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     // Replay is done (or the client is gone). Flip the flag and flush
     // whatever live events queued up while replay was running, in the same
     // synchronous stretch so no hub callback can interleave and re-buffer.
+    // Skip the writes entirely if the socket is already destroyed (client
+    // disconnected mid-replay) — write() would just be a silent no-op.
     replaying = false
-    for (const ev of pending) write(ev) // seq guard dedupes anything replay already sent
+    if (!reply.raw.destroyed) {
+      for (const ev of pending) write(ev) // seq guard dedupes anything replay already sent
+    }
     pending.length = 0
   })
 

@@ -199,7 +199,7 @@ Non-numeric/empty numeric params (`from_ts`, `to_ts`, `after_seq`,
 
 | Field | Type | Notes |
 |---|---|---|
-| `seq` | number | Monotonic, server-assigned, unique across the whole database (not per-session). This is the authoritative ordering key. |
+| `seq` | number | Monotonic, server-assigned, unique across the whole database (not per-session). This is the authoritative ordering key. Values are never reused, even after sessions are deleted (SQLite `AUTOINCREMENT`), so a held `after_seq` cursor can never silently skip new data. |
 | `session_id` | string | |
 | `ts` | number | Client-provided (or coerced) event time, epoch ms. Not trustworthy for ordering — use `seq`. |
 | `received_at` | number | Server receive time, epoch ms, for the batch this event arrived in. |
