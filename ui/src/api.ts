@@ -1,4 +1,4 @@
-// Thin HTTP client for the deblog contract in API.md. Relative URLs so the
+// Thin HTTP client for the logsafe contract in API.md. Relative URLs so the
 // Vite dev proxy and the production same-origin static bundle both work
 // unmodified.
 

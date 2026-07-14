@@ -132,7 +132,7 @@ export function SessionDetailPage() {
         const s = await getSession(id)
         if (!cancelled) setSession(s)
       } catch (err) {
-        console.error('[deblog] failed to load session:', err)
+        console.error('[logsafe] failed to load session:', err)
       }
     }
     void load()

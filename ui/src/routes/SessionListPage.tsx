@@ -6,7 +6,7 @@ import { sourceColorIndex } from '../lib/sources'
 import { isModifierKeyEvent } from '../lib/keyboard'
 
 const REFRESH_MS = 5000
-const DEBLOG_VERSION = 'v0.1.0'
+const LOGSAFE_VERSION = 'v0.1.0'
 
 function isActiveElementEditable(): boolean {
   const el = document.activeElement
@@ -27,7 +27,7 @@ export function SessionListPage() {
       setSessions(list)
       setNow(Date.now())
     } catch (err) {
-      console.error('[deblog] failed to load sessions:', err)
+      console.error('[logsafe] failed to load sessions:', err)
     }
   }, [])
 
@@ -57,7 +57,7 @@ export function SessionListPage() {
         await deleteSession(s.id)
         await refresh()
       } catch (err) {
-        console.error('[deblog] failed to delete session:', err)
+        console.error('[logsafe] failed to delete session:', err)
       }
     },
     [refresh],
@@ -170,7 +170,7 @@ export function SessionListPage() {
       </div>
 
       <footer>
-        <span className="k">deblog {DEBLOG_VERSION}</span>
+        <span className="k">logsafe {LOGSAFE_VERSION}</span>
         <span>
           {sessions?.length ?? 0} sessions · {totalEvents.toLocaleString('en-US')} events ·{' '}
           {totalErrors.toLocaleString('en-US')} errors

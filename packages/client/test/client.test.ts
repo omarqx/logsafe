@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { initDeblog, createLog, flush, _resetForTests } from '../src/index.js'
+import { initLogsafe, createLog, flush, _resetForTests } from '../src/index.js'
 
 const fetchMock = vi.fn()
 
@@ -20,17 +20,17 @@ function sentBatches(): Record<string, unknown>[][] {
   return fetchMock.mock.calls.map((c) => JSON.parse((c[1] as RequestInit).body as string))
 }
 
-describe('@deblog/client', () => {
+describe('logsafe-client', () => {
   it('is a no-op before init and when disabled', async () => {
     createLog('a').info('dropped')
-    initDeblog({ source: 'webapp', enabled: false })
+    initLogsafe({ source: 'webapp', enabled: false })
     createLog('a').info('also dropped')
     await vi.advanceTimersByTimeAsync(1000)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('batches events and flushes after 250ms', async () => {
-    initDeblog({ source: 'webapp', sessionId: 's1', sessionLabel: 'run A' })
+    initLogsafe({ source: 'webapp', sessionId: 's1', sessionLabel: 'run A' })
     const log = createLog('auth:token')
     log.debug('one', { n: 1 })
     log.error('two')
@@ -56,7 +56,7 @@ describe('@deblog/client', () => {
   })
 
   it('flushes immediately at 64 buffered events', async () => {
-    initDeblog({ source: 'webapp', sessionId: 's1' })
+    initLogsafe({ source: 'webapp', sessionId: 's1' })
     const log = createLog('bulk')
     for (let i = 0; i < 64; i++) log.info(`m${i}`)
     await vi.advanceTimersByTimeAsync(0)
@@ -65,7 +65,7 @@ describe('@deblog/client', () => {
   })
 
   it('withTrace binds trace onto every event', async () => {
-    initDeblog({ source: 'api', sessionId: 's1' })
+    initLogsafe({ source: 'api', sessionId: 's1' })
     const log = createLog('req').withTrace('t-42')
     log.info('handled')
     await flush()
@@ -73,13 +73,13 @@ describe('@deblog/client', () => {
   })
 
   it('generates a sessionId when none supplied', () => {
-    const { sessionId } = initDeblog({ source: 'webapp' })
+    const { sessionId } = initLogsafe({ source: 'webapp' })
     expect(sessionId).toMatch(/^[0-9a-z]+-[0-9a-z]{12}$/)
   })
 
   it('buffers on network failure, then drops oldest beyond 10k and reports drops', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    initDeblog({ source: 'webapp', sessionId: 's1' })
+    initLogsafe({ source: 'webapp', sessionId: 's1' })
     const log = createLog('spam')
 
     fetchMock.mockRejectedValue(new Error('ECONNREFUSED'))
@@ -90,14 +90,14 @@ describe('@deblog/client', () => {
     fetchMock.mockResolvedValue({ ok: true })
     await flush()
     const all = sentBatches().flat()
-    const dropNotice = all.find((e) => e.ns === 'deblog' && e.level === 'warn')
+    const dropNotice = all.find((e) => e.ns === 'logsafe' && e.level === 'warn')
     expect(dropNotice).toBeDefined()
     expect(dropNotice!.msg).toMatch(/dropped 50 events/)
     warnSpy.mockRestore()
   })
 
   it('a non-serializable ctx never throws and never wedges the buffer', async () => {
-    initDeblog({ source: 'webapp', sessionId: 's1' })
+    initLogsafe({ source: 'webapp', sessionId: 's1' })
     const log = createLog('poison')
     const circular: Record<string, unknown> = {}
     circular.self = circular
@@ -113,11 +113,11 @@ describe('@deblog/client', () => {
     expect(sentBatches().flat().some((e) => e.msg === 'after')).toBe(true)
   })
 
-  it('repeated initDeblog does not stack process listeners', () => {
+  it('repeated initLogsafe does not stack process listeners', () => {
     const before = process.listenerCount('beforeExit')
-    initDeblog({ source: 'a' })
-    initDeblog({ source: 'b' })
-    initDeblog({ source: 'c' })
+    initLogsafe({ source: 'a' })
+    initLogsafe({ source: 'b' })
+    initLogsafe({ source: 'c' })
     expect(process.listenerCount('beforeExit')).toBeLessThanOrEqual(before + 1)
   })
 })

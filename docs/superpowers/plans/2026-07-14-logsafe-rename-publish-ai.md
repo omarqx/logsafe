@@ -113,7 +113,7 @@ Expected: EMPTY output. Then `npm test` (209 pass) and `npm run typecheck` (clea
 
 - [ ] **Step 1: API.md** — replace deblog → logsafe in prose, examples, and header. In the freeze header add: `2026-07-14: project renamed deblog → logsafe. Routes, params, and shapes unchanged; only names in prose.` Env var references become `LOGSAFE_DB`.
 - [ ] **Step 2: README.md** — full rename (title, prose, env table `LOGSAFE_DB`, client snippets `initLogsafe` + package `logsafe-client`, agent section curl examples unchanged except names). Top of README: add a one-liner under the title: ```Run it: `npx logsafe` → http://127.0.0.1:4600``` (true once published; the from-source `npm start` quickstart stays).
-- [ ] **Step 3: Verify** — `git grep -il deblog -- ':!docs' ':!design' ':!.superpowers'` still empty; spot-check 3 curl examples against a scratch server (`LOGSAFE_DB=/tmp/ls-doc.db npm start`, curl, kill, rm).
+- [ ] **Step 3: Verify** — `git grep -il deblog -- ':!docs' ':!design' ':!.superpowers'` returns at most `API.md`, whose only matching line is the rename version note (check with `git grep -in deblog -- API.md`); spot-check 3 curl examples against a scratch server (`LOGSAFE_DB=/tmp/ls-doc.db npm start`, curl, kill, rm).
 - [ ] **Step 4: Commit** — `git commit -m "docs: rename to logsafe, API.md version note"`
 
 ### Task 4: Machine data migration
@@ -727,7 +727,7 @@ kill %1; cd /; rm -rf /tmp/ls-smoke /tmp/ls-smoke.db* /tmp/logsafe-*.tgz
 ## Exit criteria
 
 1. `npm test` green, `npm run typecheck` clean, from `~/Github/logsafe`.
-2. `git grep -il deblog -- ':!docs' ':!design' ':!.superpowers'` → empty.
+2. `git grep -il deblog -- ':!docs' ':!design' ':!.superpowers'` → at most `API.md`, whose only matching line is the rename version note in the freeze header (the note necessarily names both; verify with `git grep -in deblog -- API.md`).
 3. Compiled CLI works without tsx: serve + `--version` + `mcp` handshake (vitest mcp suite green).
 4. Pack-and-install smoke (RELEASING.md step 3) passes.
 5. `omarqx/logsafe` public, `main` pushed, secret-scan logged in the ledger, README renders on the landing page.

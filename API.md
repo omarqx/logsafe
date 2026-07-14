@@ -1,7 +1,10 @@
-# deblog HTTP API
+# logsafe HTTP API
 
 > **This contract is FROZEN as of Phase 2.** The web UI (Phase 3/4) is built
 > strictly against this document. Changes require a version note here.
+>
+> - 2026-07-14: project renamed deblog → logsafe. Routes, params, and shapes
+>   unchanged; only names in prose.
 
 Base URL: `http://127.0.0.1:4600` (default; see `README.md#configuration`).
 All responses are `application/json` unless noted otherwise. CORS is

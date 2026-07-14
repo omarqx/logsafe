@@ -54,7 +54,7 @@ interface State {
 let state: State | null = null
 let listenersInstalled = false
 
-export function initDeblog(opts: InitOptions): { sessionId: string } {
+export function initLogsafe(opts: InitOptions): { sessionId: string } {
   if (opts.enabled === false) {
     state = null
     return { sessionId: opts.sessionId ?? '' }
@@ -192,7 +192,7 @@ export async function flush(): Promise<void> {
           ts: Date.now(),
           session_id: s.sessionId,
           source: s.source,
-          ns: 'deblog',
+          ns: 'logsafe',
           level: 'warn',
           msg: `dropped ${n} events (client buffer full while server unreachable)`,
         })
@@ -201,7 +201,7 @@ export async function flush(): Promise<void> {
   } catch (err) {
     if (!s.warned) {
       s.warned = true
-      console.warn(`[deblog] log server unreachable, buffering (drop-oldest beyond ${MAX_BUFFER}):`, (err as Error).message)
+      console.warn(`[logsafe] log server unreachable, buffering (drop-oldest beyond ${MAX_BUFFER}):`, (err as Error).message)
     }
     scheduleFlush(s, RETRY_MS) // events stay buffered; retry later
   } finally {

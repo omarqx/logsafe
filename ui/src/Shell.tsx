@@ -5,7 +5,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="frame">
       <header>
         <span className="logo">
-          deblog
+          logsafe
           <span className="cursor" />
         </span>
       </header>
