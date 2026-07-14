@@ -1,11 +1,17 @@
 {
   "name": "logsafe-client",
   "version": "0.1.0",
+  "description": "Zero-dependency logging client for logsafe: batched HTTP delivery, sendBeacon unload flush, never throws into the host app.",
+  "keywords": ["logging", "logsafe", "debugging"],
+  "license": "MIT",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": {
-    "build": "tsc -p tsconfig.json"
-  }
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "sideEffects": false,
+  "files": ["dist", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "repository": { "type": "git", "url": "git+https://github.com/omarqx/logsafe.git", "directory": "packages/client" },
+  "publishConfig": { "access": "public" },
+  "scripts": { "build": "tsc -p tsconfig.json", "prepublishOnly": "tsc -p tsconfig.json && npx vitest run --root ../.. src" }
 }
