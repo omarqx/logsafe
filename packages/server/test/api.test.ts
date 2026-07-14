@@ -54,6 +54,11 @@ describe('POST /v1/log', () => {
     expect(res.json()).toEqual({ accepted: 1, rejected: 0 })
   })
 
+  it('malformed JSON through the catch-all parser returns 400, not 500', async () => {
+    const res = await post('not json at all', 'application/x-www-form-urlencoded')
+    expect(res.statusCode).toBe(400)
+  })
+
   it('sends permissive CORS headers', async () => {
     const res = await app.inject({
       method: 'OPTIONS',
