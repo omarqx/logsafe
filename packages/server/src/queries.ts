@@ -18,7 +18,7 @@ export interface EventFilters {
 export const DEFAULT_LIMIT = 500
 export const MAX_LIMIT = 10_000
 
-/** Translate a deblog ns pattern (auth:*, player.*) to SQLite GLOB:
+/** Translate a logsafe ns pattern (auth:*, player.*) to SQLite GLOB:
     our only wildcard is '*'; escape GLOB's other metacharacters. */
 export function nsToGlob(pattern: string): string {
   return pattern.replace(/\[/g, '[[]').replace(/\?/g, '[?]')

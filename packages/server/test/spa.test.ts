@@ -7,7 +7,7 @@ import { openDb } from '../src/db.js'
 import { buildApp } from '../src/app.js'
 import { registerSpa } from '../src/spa.js'
 
-const MARKER = '<!doctype html><title>deblog-spa-marker</title>'
+const MARKER = '<!doctype html><title>logsafe-spa-marker</title>'
 
 let app: FastifyInstance
 let publicDir: string
@@ -18,7 +18,7 @@ afterEach(async () => {
 })
 
 async function buildWithPublicDir(): Promise<FastifyInstance> {
-  publicDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deblog-spa-'))
+  publicDir = fs.mkdtempSync(path.join(os.tmpdir(), 'logsafe-spa-'))
   fs.writeFileSync(path.join(publicDir, 'index.html'), MARKER)
   const built = buildApp({ db: openDb(':memory:') })
   await registerSpa(built, publicDir)

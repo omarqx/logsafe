@@ -1,5 +1,5 @@
 /**
- * deblog demo: emits a realistic two-source debug session and verifies it
+ * logsafe demo: emits a realistic two-source debug session and verifies it
  * back over the HTTP API. Usage:
  *   npm run demo            # emit, verify, exit
  *   npm run demo -- --keep  # leave the server running to browse
@@ -8,10 +8,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { openDb } from '../packages/server/src/db.js'
 import { buildApp } from '../packages/server/src/app.js'
-import { initDeblog, createLog, flush } from '../packages/client/src/index.js'
+import { initLogsafe, createLog, flush } from '../packages/client/src/index.js'
 
 const PORT = Number(process.env.PORT ?? 4600)
-const DB_PATH = process.env.DEBLOG_DB ?? path.join(os.homedir(), '.deblog', 'deblog.db')
+const DB_PATH = process.env.LOGSAFE_DB ?? path.join(os.homedir(), '.logsafe', 'logsafe.db')
 const BASE = `http://127.0.0.1:${PORT}`
 const KEEP = process.argv.includes('--keep')
 
@@ -20,8 +20,8 @@ const app = buildApp({ db })
 await app.listen({ host: '127.0.0.1', port: PORT })
 console.log(`server up at ${BASE} (db: ${DB_PATH})`)
 
-// ---- emit: webapp source via @deblog/client -------------------------------
-const { sessionId } = initDeblog({
+// ---- emit: webapp source via logsafe-client -------------------------------
+const { sessionId } = initLogsafe({
   source: 'webapp',
   sessionLabel: 'demo: checkout flow',
   url: BASE,

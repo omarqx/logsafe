@@ -11,14 +11,14 @@ function envNumber(name: string, fallback: number): number {
   if (raw === undefined || raw === '') return fallback
   const n = Number(raw)
   if (!Number.isFinite(n)) {
-    console.warn(`[deblog] invalid ${name}="${raw}", using default ${fallback}`)
+    console.warn(`[logsafe] invalid ${name}="${raw}", using default ${fallback}`)
     return fallback
   }
   return n
 }
 
 const PORT = envNumber('PORT', 4600)
-const DB_PATH = process.env.DEBLOG_DB ?? path.join(os.homedir(), '.deblog', 'deblog.db')
+const DB_PATH = process.env.LOGSAFE_DB ?? path.join(os.homedir(), '.logsafe', 'logsafe.db')
 const RETENTION_DAYS = envNumber('RETENTION_DAYS', 7)
 
 const db = openDb(DB_PATH)
@@ -32,9 +32,9 @@ if (fs.existsSync(publicDir)) {
 function safePrune(): void {
   try {
     const pruned = pruneSessions(db, RETENTION_DAYS, Date.now())
-    if (pruned > 0) console.log(`[deblog] retention: pruned ${pruned} session(s) older than ${RETENTION_DAYS}d`)
+    if (pruned > 0) console.log(`[logsafe] retention: pruned ${pruned} session(s) older than ${RETENTION_DAYS}d`)
   } catch (err) {
-    console.error('[deblog] retention prune failed (will retry next interval):', (err as Error).message)
+    console.error('[logsafe] retention prune failed (will retry next interval):', (err as Error).message)
   }
 }
 
@@ -42,4 +42,4 @@ safePrune()
 setInterval(safePrune, 3_600_000).unref()
 
 const address = await app.listen({ host: '127.0.0.1', port: PORT })
-console.log(`[deblog] listening on ${address}  (db: ${DB_PATH}, retention: ${RETENTION_DAYS}d)`)
+console.log(`[logsafe] listening on ${address}  (db: ${DB_PATH}, retention: ${RETENTION_DAYS}d)`)

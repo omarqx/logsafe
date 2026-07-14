@@ -18,7 +18,7 @@ describe('openDb', () => {
   })
 
   it('is idempotent: reopening the same file re-applies schema safely', () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'deblog-test-')), 'test.db')
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'logsafe-test-')), 'test.db')
     const first = openDb(file)
     first.prepare(`INSERT INTO sessions (id, first_ts, last_ts) VALUES ('s', 1, 1)`).run()
     first.close()
