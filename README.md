@@ -186,6 +186,19 @@ claude mcp add logsafe -- npx logsafe mcp
 Tools: `list_sessions`, `get_session`, `query_events`, `tail_session` —
 read-only, talking to your local server (override with `--url` or `LOGSAFE_URL`).
 
+**MCP over HTTP (no subprocess)** — a running logsafe server hosts MCP at `/mcp`:
+
+```bash
+claude mcp add --transport http logsafe http://127.0.0.1:4600/mcp
+```
+
+```jsonc
+// Cursor ~/.cursor/mcp.json
+{ "mcpServers": { "logsafe": { "url": "http://127.0.0.1:4600/mcp" } } }
+```
+
+The stdio form (`npx logsafe mcp`) still works for stdio-only clients.
+
 **Skill (Claude Code)** — a debugging workflow skill ships in this repo/package:
 
 ```bash
