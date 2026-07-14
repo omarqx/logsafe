@@ -45,9 +45,12 @@ Hard rename, one sweep:
 
 Machine migration (this machine only, done during implementation, documented
 in README): `mv ~/.deblog ~/.logsafe && mv ~/.logsafe/deblog.db ~/.logsafe/logsafe.db`
-(plus `-wal`/`-shm` if present). launch.json entries and the assistant memory
-file updated. The repo directory may stay `~/sandbox/deblog` (renaming the
-checkout is cosmetic and up to the user; nothing in-code depends on it).
+(plus `-wal`/`-shm` if present). **The checkout moves to `~/Github/logsafe`**
+(`mv ~/sandbox/deblog ~/Github/logsafe`) — production projects live in
+`~/Github` per the user's convention; nothing in-code depends on the path,
+but the machine-local references do and are updated in the same step:
+`~/.claude/launch.json` (three entries point at the old path) and the
+assistant memory file.
 
 Verification: full existing suite passes after the sweep (name-only change);
 a repo-wide case-insensitive grep for `deblog` returns only the historical
