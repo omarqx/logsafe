@@ -1,7 +1,7 @@
 {
   "name": "logsafe",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local debugging log server: apps POST structured events over HTTP; sessions persist in SQLite with a dense web UI, SSE live tail, and an MCP server for AI agents.",
   "keywords": [
     "logging",
