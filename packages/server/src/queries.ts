@@ -102,3 +102,65 @@ export function queryEvents(
     next_after_seq: rows.length === limit ? rows[rows.length - 1].seq : null,
   }
 }
+
+export const ACTIVE_WINDOW_MS = 60_000
+
+export interface SessionSummary {
+  id: string
+  label: string | null
+  first_ts: number
+  last_ts: number
+  duration_ms: number
+  status: 'active' | 'idle'
+  event_count: number
+  error_count: number
+  warn_count: number
+  sources: string[]
+}
+
+interface SessionRow {
+  id: string
+  label: string | null
+  first_ts: number
+  last_ts: number
+  event_count: number
+  error_count: number
+  warn_count: number
+  sources: string
+}
+
+function rowToSession(row: SessionRow, now: number): SessionSummary {
+  return {
+    id: row.id,
+    label: row.label,
+    first_ts: row.first_ts,
+    last_ts: row.last_ts,
+    duration_ms: row.last_ts - row.first_ts,
+    status: now - row.last_ts <= ACTIVE_WINDOW_MS ? 'active' : 'idle',
+    event_count: row.event_count,
+    error_count: row.error_count,
+    warn_count: row.warn_count,
+    sources: JSON.parse(row.sources),
+  }
+}
+
+export function listSessions(db: Db, limit: number, offset: number, now: number): SessionSummary[] {
+  const rows = db
+    .prepare('SELECT * FROM sessions ORDER BY last_ts DESC LIMIT ? OFFSET ?')
+    .all(limit, offset) as SessionRow[]
+  return rows.map((r) => rowToSession(r, now))
+}
+
+export function getSession(db: Db, id: string, now: number): SessionSummary | null {
+  const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined
+  return row ? rowToSession(row, now) : null
+}
+
+export function deleteSession(db: Db, id: string): boolean {
+  const run = db.transaction((sid: string): boolean => {
+    db.prepare('DELETE FROM events WHERE session_id = ?').run(sid)
+    const res = db.prepare('DELETE FROM sessions WHERE id = ?').run(sid)
+    return res.changes > 0
+  })
+  return run(id)
+}

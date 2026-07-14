@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { openDb, type Db } from '../src/db.js'
 import { normalizeEvent } from '../src/normalize.js'
 import { insertBatch } from '../src/ingest.js'
-import { nsToGlob, queryEvents } from '../src/queries.js'
+import { nsToGlob, queryEvents, listSessions, getSession, deleteSession, ACTIVE_WINDOW_MS } from '../src/queries.js'
 
 const NOW = Date.UTC(2026, 6, 13, 12, 0, 0)
 
@@ -73,5 +73,38 @@ describe('queryEvents', () => {
 
   it('unknown session returns empty', () => {
     expect(queryEvents(db, 'nope', {}).events).toEqual([])
+  })
+})
+
+describe('sessions', () => {
+  it('listSessions: newest first, computed status and duration', () => {
+    // s1 fixture: first_ts=1000, last_ts=5000
+    insertBatch(db, [normalizeEvent({ msg: 'x', session_id: 's2', ts: NOW }, NOW)!])
+    const sessions = listSessions(db, 50, 0, NOW)
+    expect(sessions.map((s) => s.id)).toEqual(['s2', 's1'])
+    expect(sessions[0].status).toBe('active') // last_ts === now
+    expect(sessions[1].status).toBe('idle')   // last_ts = 5000, ancient
+    expect(sessions[1].duration_ms).toBe(4000)
+    expect(sessions[1].sources).toEqual(['api', 'webapp'])
+    expect(sessions[1].event_count).toBe(5)
+    expect(sessions[1].error_count).toBe(1)
+  })
+
+  it('status boundary: active within ACTIVE_WINDOW_MS', () => {
+    insertBatch(db, [normalizeEvent({ msg: 'x', session_id: 's3', ts: NOW - ACTIVE_WINDOW_MS }, NOW)!])
+    expect(getSession(db, 's3', NOW)!.status).toBe('active')
+    expect(getSession(db, 's3', NOW + 1)!.status).toBe('idle')
+  })
+
+  it('getSession returns null for unknown id', () => {
+    expect(getSession(db, 'nope', NOW)).toBeNull()
+  })
+
+  it('deleteSession removes session and its events', () => {
+    expect(deleteSession(db, 's1')).toBe(true)
+    expect(getSession(db, 's1', NOW)).toBeNull()
+    const c = db.prepare(`SELECT count(*) AS c FROM events WHERE session_id = 's1'`).get() as { c: number }
+    expect(c.c).toBe(0)
+    expect(deleteSession(db, 's1')).toBe(false)
   })
 })
