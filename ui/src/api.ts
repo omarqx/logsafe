@@ -54,6 +54,13 @@ export async function getSession(id: string): Promise<SessionSummary | null> {
   return res.json() as Promise<SessionSummary>
 }
 
+/** Idempotent: a 404 (already deleted) is treated as success, not an error. */
+export async function deleteSession(id: string): Promise<void> {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (res.status === 404) return
+  await assertOk(res, 'deleteSession')
+}
+
 export async function fetchEventsPage(
   id: string,
   params: URLSearchParams,

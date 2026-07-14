@@ -44,6 +44,39 @@ export function formatTs(mode: TsMode, ev: { ts: number }, sessionStart: number,
   }
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+export interface StartedLabel {
+  time: string
+  day: string
+}
+
+/**
+ * Formats a session's `first_ts` for the list view: local 'HH:MM:SS' plus a
+ * relative day word — 'today' or 'yesterday' for the local calendar day
+ * relative to `now`, otherwise an abbreviated 'Mon D' date.
+ */
+export function formatStarted(ts: number, now: number): StartedLabel {
+  const d = new Date(ts)
+  const n = new Date(now)
+  const time = `${pad(d.getHours(), 2)}:${pad(d.getMinutes(), 2)}:${pad(d.getSeconds(), 2)}`
+
+  const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const nDay = new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime()
+  const diffDays = Math.round((nDay - dDay) / 86_400_000)
+
+  let day: string
+  if (diffDays === 0) {
+    day = 'today'
+  } else if (diffDays === 1) {
+    day = 'yesterday'
+  } else {
+    day = `${MONTHS[d.getMonth()]} ${d.getDate()}`
+  }
+
+  return { time, day }
+}
+
 /** '30s' under a minute, '2m 04s' under an hour, '6h 12m' at an hour or beyond. */
 export function formatDuration(ms: number): string {
   const totalSec = Math.floor(ms / 1000)

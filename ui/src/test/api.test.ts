@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { listSessions, getSession, fetchEventsPage, type SessionSummary, type StoredEvent } from '../api'
+import { listSessions, getSession, fetchEventsPage, deleteSession, type SessionSummary, type StoredEvent } from '../api'
 import { filtersToApiParams } from '../lib/filters'
 
 const fetchMock = vi.fn()
@@ -18,6 +18,14 @@ function jsonResponse(body: unknown, status = 200): Response {
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
+  } as Response
+}
+
+function emptyResponse(status: number): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => undefined,
   } as Response
 }
 
@@ -104,5 +112,23 @@ describe('fetchEventsPage', () => {
     fetchMock.mockResolvedValue(jsonResponse({ events: [], next_after_seq: null }))
     await fetchEventsPage('s1', new URLSearchParams())
     expect(fetchMock).toHaveBeenCalledWith('/api/sessions/s1/events')
+  })
+})
+
+describe('deleteSession', () => {
+  it('DELETEs /api/sessions/:id, url-encoded', async () => {
+    fetchMock.mockResolvedValue(emptyResponse(204))
+    await deleteSession('s 1')
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/s%201', { method: 'DELETE' })
+  })
+
+  it('treats 404 as a no-op instead of throwing (already deleted)', async () => {
+    fetchMock.mockResolvedValue(emptyResponse(404))
+    await expect(deleteSession('missing')).resolves.toBeUndefined()
+  })
+
+  it('throws on other non-2xx statuses', async () => {
+    fetchMock.mockResolvedValue(emptyResponse(500))
+    await expect(deleteSession('s1')).rejects.toThrow('deleteSession failed: 500')
   })
 })

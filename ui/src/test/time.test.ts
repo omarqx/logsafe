@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatTs, formatDuration } from '../lib/time'
+import { formatTs, formatDuration, formatStarted } from '../lib/time'
 
 function localHHMMSSmmm(ts: number): string {
   const d = new Date(ts)
@@ -58,5 +58,37 @@ describe('formatDuration', () => {
   it('formats hour+ durations as Nh MMm, minutes zero-padded, no seconds', () => {
     expect(formatDuration(22_320_000)).toBe('6h 12m')
     expect(formatDuration(3_600_000)).toBe('1h 00m')
+  })
+})
+
+describe('formatStarted', () => {
+  it('formats the time as zero-padded local HH:MM:SS', () => {
+    const ts = new Date(2026, 6, 13, 9, 5, 3).getTime()
+    const now = new Date(2026, 6, 13, 22, 0, 0).getTime()
+    expect(formatStarted(ts, now).time).toBe('09:05:03')
+  })
+
+  it('labels same local calendar day as "today"', () => {
+    const ts = new Date(2026, 6, 13, 0, 0, 1).getTime()
+    const now = new Date(2026, 6, 13, 23, 59, 59).getTime()
+    expect(formatStarted(ts, now).day).toBe('today')
+  })
+
+  it('labels the previous local calendar day as "yesterday"', () => {
+    const ts = new Date(2026, 6, 12, 23, 59, 0).getTime()
+    const now = new Date(2026, 6, 13, 0, 0, 30).getTime()
+    expect(formatStarted(ts, now).day).toBe('yesterday')
+  })
+
+  it('labels anything older than yesterday as an abbreviated month + day', () => {
+    const ts = new Date(2026, 6, 11, 9, 12, 44).getTime()
+    const now = new Date(2026, 6, 13, 22, 58, 41).getTime()
+    expect(formatStarted(ts, now).day).toBe('Jul 11')
+  })
+
+  it('crosses year/month boundaries correctly for "yesterday"', () => {
+    const ts = new Date(2025, 11, 31, 23, 0, 0).getTime() // Dec 31, 2025
+    const now = new Date(2026, 0, 1, 0, 30, 0).getTime() // Jan 1, 2026
+    expect(formatStarted(ts, now).day).toBe('yesterday')
   })
 })
