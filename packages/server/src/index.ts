@@ -1,9 +1,9 @@
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
-import fastifyStatic from '@fastify/static'
 import { openDb } from './db.js'
 import { buildApp } from './app.js'
+import { registerSpa } from './spa.js'
 import { pruneSessions } from './retention.js'
 
 function envNumber(name: string, fallback: number): number {
@@ -26,7 +26,7 @@ const app = buildApp({ db })
 
 const publicDir = path.join(import.meta.dirname, '..', 'public')
 if (fs.existsSync(publicDir)) {
-  app.register(fastifyStatic, { root: publicDir })
+  await registerSpa(app, publicDir)
 }
 
 function safePrune(): void {

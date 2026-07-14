@@ -3,13 +3,16 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "ui"
   ],
   "scripts": {
     "start": "tsx packages/server/src/index.ts",
     "demo": "tsx examples/demo.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p packages/server && tsc -p packages/client --noEmit"
+    "typecheck": "tsc -p packages/server && tsc -p packages/client --noEmit && tsc -p ui --noEmit",
+    "dev:ui": "npm run dev --workspace=ui",
+    "build:ui": "npm run build --workspace=ui"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

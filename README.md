@@ -6,9 +6,8 @@ deblog is a local debugging log server: point any app (or any HTTP client)
 at it and it collects log events into named **sessions**, stored in a local
 SQLite database. It groups related events (across multiple processes or
 sources — a browser tab and its backend, say) so you can filter, search, and
-tail them while you debug. A web UI for browsing sessions is coming in a
-later phase; for now everything is available over plain HTTP (see
-`API.md`).
+tail them while you debug. A web UI for browsing sessions is included (see
+below); everything is also available over plain HTTP (see `API.md`).
 
 ## Quickstart
 
@@ -33,6 +32,47 @@ verifies it back over the API:
 ```bash
 npm run demo -- --keep   # leaves the server running so you can explore
 ```
+
+## Web UI
+
+Build once, then the server serves the app at its own port:
+
+```bash
+npm run build:ui
+npm start
+# open http://127.0.0.1:4600
+```
+
+Session list → click into a session for the dense log stream: composable
+filters (`ns:payment.*`, `level:warn,error`, `trace:…`, bare text = full-text
+search) typed into the command bar as `key:value` tokens, an error/density
+minimap on the right edge (click to jump), per-row expandable ctx JSON, and a
+live tail over SSE that pauses when you scroll up (buffered events are counted;
+`G` resumes). Every piece of view state — filters, timestamp mode, pinned rows,
+selection — lives in the URL, so copying the address bar shares the exact view.
+Filter changes are history entries: the back button undoes them.
+
+Keyboard map:
+
+| Key | Action |
+|---|---|
+| `j` / `k` | move selection down / up (pauses live tail) |
+| `Enter` / `o` | expand/collapse the selected row's ctx |
+| `/` | focus text search |
+| `f` | focus the filter input |
+| `e` | toggle `level:warn,error` |
+| `p` | pin/unpin the selected row (pins survive filter changes) |
+| `t` | cycle timestamps: absolute → relative → Δ from previous |
+| `g` / `G` | jump to top / bottom (`G` at bottom resumes the live tail) |
+| `x` | (session list) delete the selected session |
+| `Esc` | leave the focused input |
+
+Timestamps show client-reported time; ordering is always the server's arrival
+order (`seq`), so interleaved multi-source sessions read in the order the
+server actually saw.
+
+Dev loop for UI work: `npm run dev:ui` (Vite on 5173, proxying to the server
+on 4600).
 
 ## Logging from your app
 
