@@ -162,13 +162,21 @@ export function useEventStream(
         // see the file header) would replay the entire rest of the session
         // client-side on every filter change/reconnect. One extra unfiltered
         // probe request bounds that: ask for the first event at the
-        // session's own last_ts (inclusive `from_ts` filter) — its seq is
-        // >= every event with an earlier ts, i.e. everything the filtered
-        // query above already had the chance to evaluate — and fast-forward
-        // the cursor to at least that point. Events sharing that exact final
-        // ts may be redelivered by SSE and re-run through the client-side
-        // predicate; that's safe (idempotent) and still bounded, vs.
-        // replaying the whole session.
+        // session's own last_ts (inclusive `from_ts` filter) and
+        // fast-forward the cursor to at least that seq. Events sharing that
+        // exact final ts may be redelivered by SSE and re-run through the
+        // client-side predicate; that's safe (idempotent) and still bounded,
+        // vs. replaying the whole session.
+        //
+        // KNOWN RACE (accepted, narrow): ts is client-clock time and NOT
+        // ordered by seq (see API.md). If, in the ~2-RTT window between the
+        // filtered load finishing and this probe, a matching straggler with
+        // a backdated ts lands AND another source ingests an event with a
+        // newer max ts, the probe can fast-forward past the straggler and
+        // it won't be shown until the next refetch. Proper fix if it ever
+        // bites: probe BEFORE the page-load loop (every post-probe ingest
+        // then has seq > probedSeq) plus a seq<=lastAppended dedupe on the
+        // SSE append path.
         if (apiParams.toString() !== '') {
           const session = await getSession(sessionId)
           if (myGen !== genRef.current) return
