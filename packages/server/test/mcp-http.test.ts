@@ -101,6 +101,11 @@ describe('POST /mcp (streamable http)', () => {
     expect(res.statusCode).toBe(405)
   })
 
+  it('DELETE /mcp is 405', async () => {
+    const res = await app.inject({ method: 'DELETE', url: '/mcp' })
+    expect(res.statusCode).toBe(405)
+  })
+
   it('rejects a non-loopback Host header with 403', async () => {
     const res = await app.inject({
       method: 'POST',

@@ -31,8 +31,10 @@ export function registerMcpHttp(app: FastifyInstance, base: string): void {
     })
     const server = createMcpServer(base)
     reply.raw.on('close', () => {
-      void transport.close()
-      void server.close()
+      // Guard against unhandled rejections: a throwing close() would crash the
+      // entire process, taking down in-flight clients. The double-close is safe.
+      void transport.close().catch(() => {})
+      void server.close().catch(() => {})
     })
     await server.connect(transport)
     reply.hijack()
