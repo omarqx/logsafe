@@ -13,5 +13,5 @@
   "engines": { "node": ">=20" },
   "repository": { "type": "git", "url": "git+https://github.com/omarqx/logsafe.git", "directory": "packages/client" },
   "publishConfig": { "access": "public" },
-  "scripts": { "build": "tsc -p tsconfig.json", "prepublishOnly": "tsc -p tsconfig.json && npx vitest run --root ../.. src" }
+  "scripts": { "build": "tsc -p tsconfig.json", "prepublishOnly": "tsc -p tsconfig.json && npx vitest run --root ../.. packages/client" }
 }
