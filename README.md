@@ -1,8 +1,10 @@
-# deblog
+# logsafe
+
+Run it: `npx logsafe` → http://127.0.0.1:4600
 
 ## What is this
 
-deblog is a local debugging log server: point any app (or any HTTP client)
+logsafe is a local debugging log server: point any app (or any HTTP client)
 at it and it collects log events into named **sessions**, stored in a local
 SQLite database. It groups related events (across multiple processes or
 sources — a browser tab and its backend, say) so you can filter, search, and
@@ -14,7 +16,7 @@ below); everything is also available over plain HTTP (see `API.md`).
 ```bash
 npm install
 npm start
-# [deblog] listening on http://127.0.0.1:4600  (db: ~/.deblog/deblog.db, retention: 7d)
+# [logsafe] listening on http://127.0.0.1:4600  (db: ~/.logsafe/logsafe.db, retention: 7d)
 ```
 
 Send it a log line:
@@ -76,15 +78,15 @@ on 4600).
 
 ## Logging from your app
 
-### JavaScript/TypeScript: `@deblog/client`
+### JavaScript/TypeScript: `logsafe-client`
 
 Zero-dependency helper for browser or Node apps. It batches events and
 sends them over `POST /v1/log`.
 
 ```ts
-import { initDeblog, createLog } from '@deblog/client'
+import { initLogsafe, createLog } from 'logsafe-client'
 
-const { sessionId } = initDeblog({
+const { sessionId } = initLogsafe({
   source: 'webapp',              // required: identifies this process/app
   sessionLabel: 'checkout flow', // optional, human-readable
   // url: 'http://127.0.0.1:4600' (default)
@@ -107,7 +109,7 @@ CLI tool).
 ### Any other language: it's just HTTP POST
 
 There's no SDK requirement — anything that can make an HTTP request can log
-to deblog. Send a JSON object or a JSON array of objects to `POST /v1/log`:
+to logsafe. Send a JSON object or a JSON array of objects to `POST /v1/log`:
 
 ```bash
 curl -s localhost:4600/v1/log -d '[
@@ -122,7 +124,7 @@ for the full field table, coercion rules, and status codes.
 
 ## For AI coding agents
 
-If you're an agent debugging an app that logs to deblog, this is the fast
+If you're an agent debugging an app that logs to logsafe, this is the fast
 path to finding and reading its logs. Full field/param reference is in
 `API.md`.
 
@@ -174,9 +176,9 @@ Environment variables, read at server startup (`npm start`):
 | Var | Default | Notes |
 |---|---|---|
 | `PORT` | `4600` | Server listens on `127.0.0.1:<PORT>` (local only, not exposed on the network). An unset/empty value uses the default; a non-numeric value logs a warning and falls back to the default rather than failing to start. |
-| `DEBLOG_DB` | `~/.deblog/deblog.db` | Path to the SQLite database file. Parent directories are created automatically. Use a throwaway path (e.g. `/tmp/deblog-test.db`) for scratch/test servers so you don't pollute your real log history. |
+| `LOGSAFE_DB` | `~/.logsafe/logsafe.db` | Path to the SQLite database file. Parent directories are created automatically. Use a throwaway path (e.g. `/tmp/logsafe-test.db`) for scratch/test servers so you don't pollute your real log history. |
 | `RETENTION_DAYS` | `7` | Sessions whose most recent event (`last_ts`) is older than this many days are deleted (session + all its events) automatically, at startup and then hourly. Same validation as `PORT`: non-numeric falls back to the default with a warning. `0` or negative disables pruning entirely. |
 
 ```bash
-DEBLOG_DB=/tmp/deblog-scratch.db PORT=4601 npm start
+LOGSAFE_DB=/tmp/logsafe-scratch.db PORT=4601 npm start
 ```
