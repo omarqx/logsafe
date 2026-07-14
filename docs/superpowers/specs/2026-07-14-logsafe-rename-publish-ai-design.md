@@ -20,8 +20,7 @@ packages, not one; MCP + skill, not either alone.
 ### Out of scope
 
 - Back-compat aliases for deblog names (nothing is deployed anywhere).
-- GitHub repo / CI / automated releases (manual `npm publish`; `repository`
-  field added later if a repo is created).
+- CI / automated releases (manual `npm publish`); branch protection.
 - Any change to HTTP routes, params, or response shapes — `API.md` stays
   frozen; only prose/branding in it changes (with a version note).
 - Destructive MCP tools (no delete_session tool).
@@ -87,7 +86,23 @@ product surface, and stay as-is.
 - The `ui/` workspace and demo import the built package via the workspace
   (imports keep working; update specifiers from `@deblog/client`).
 
-### 3.3 Release flow
+### 3.3 Public GitHub repo
+
+- Create **public** repo `omarqx/logsafe` (gh CLI is authed as `omarqx`;
+  name verified free 2026-07-14) and push `main` (full history, including
+  the deblog-era commits — honest provenance).
+- **Pre-push hygiene gate:** scan the full history for secrets/tokens
+  (`git log -p` grep for key patterns) before the first push. Known and
+  accepted: docs contain local machine paths and the process artifacts in
+  `docs/superpowers/*` — paths and a username are not secrets. The
+  `.superpowers/` scratch dir and `packages/server/public/` build output
+  are already gitignored and never committed.
+- Both package.json files gain `repository`, `bugs`, and `homepage`
+  pointing at the repo (this supersedes the earlier "add later" note).
+- README top: one-line install/run (`npx logsafe`) so the repo landing
+  page is usable.
+
+### 3.4 Release flow
 
 - `RELEASING.md` at repo root: version bump per package, `npm publish -w packages/client`
   then `-w packages/server`, and the pre-publish smoke:
@@ -167,7 +182,8 @@ product surface, and stay as-is.
   stray `deblog` outside historical docs.
 - **B:** build outputs verified (dist runs under plain `node`, no tsx);
   pack-and-install smoke in a temp dir per RELEASING.md; client tarball
-  imports cleanly with types.
+  imports cleanly with types; history secret-scan passes before the GitHub
+  push; pushed repo landing page renders README correctly.
 - **C:** integration test spawning `logsafe mcp` as a child process,
   speaking real MCP over stdio (initialize → list tools → call
   `list_sessions`/`query_events`/`tail_session`) against a temp-DB server;
