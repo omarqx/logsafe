@@ -55,7 +55,7 @@ body::after {
 
 .frame {
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -373,4 +373,311 @@ footer .right {
   margin-top: 8px;
   padding: 4px 8px;
   font-size: 11px;
+}
+
+/* ── session detail: crumb bar ─────────────── */
+.crumbbar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 20px 9px;
+  border-bottom: 1px solid var(--line);
+}
+
+.counts {
+  margin-left: auto;
+  display: flex;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+
+.counts .e {
+  color: var(--err);
+  font-weight: 700;
+}
+
+.counts .w {
+  color: var(--amber);
+}
+
+.tailchip {
+  color: var(--faint);
+  font-size: 11px;
+  border: 1px solid var(--faint);
+  padding: 1px 8px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.tailchip.paused {
+  color: var(--amber);
+  border-color: rgba(255, 180, 84, 0.4);
+  cursor: pointer;
+}
+
+.tailchip.paused::before {
+  content: '⏸ ';
+}
+
+/* ── session detail: cmdline extras ────────── */
+.freetext-input {
+  flex: 1 1 auto;
+  min-width: 80px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--txt);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.freetext-input::placeholder {
+  color: var(--faint);
+}
+
+.tsmode {
+  border: 1px solid var(--faint);
+  border-radius: 2px;
+  overflow: hidden;
+  display: inline-flex;
+}
+
+.tsmode span {
+  padding: 1px 7px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.tsmode span.on {
+  background: var(--faint);
+  color: var(--bg);
+}
+
+/* ── session detail: pinned strip ──────────── */
+.pinned {
+  border-bottom: 1px solid var(--line);
+  background: #0f130d;
+}
+
+.pinned .cap {
+  padding: 3px 20px 0;
+  color: var(--amber);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.pinned .logrow {
+  opacity: 0.95;
+}
+
+/* ── session detail: log stream ────────────── */
+.stream-wrap {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.stream {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 2px;
+}
+
+.logrow {
+  display: grid;
+  grid-template-columns: 8px 74px 64px 150px 52px 1fr;
+  column-gap: 10px;
+  align-items: baseline;
+  padding: 2px 8px 2px 12px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.logrow:hover {
+  background: #10150f;
+}
+
+.logrow .gut {
+  align-self: stretch;
+  border-radius: 1px;
+}
+
+.gut-0 {
+  background: rgba(92, 201, 245, 0.55);
+}
+
+.gut-1 {
+  background: rgba(199, 146, 234, 0.55);
+}
+
+.gut-2 {
+  background: rgba(143, 163, 184, 0.55);
+}
+
+.gut-3 {
+  background: rgba(224, 175, 104, 0.55);
+}
+
+.gut-4 {
+  background: rgba(158, 206, 106, 0.55);
+}
+
+.gut-5 {
+  background: rgba(247, 118, 142, 0.55);
+}
+
+.logrow .ts {
+  color: var(--faint);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.logrow .src {
+  font-size: 11px;
+  border: none;
+  padding: 0;
+  background: none;
+}
+
+.logrow .ns {
+  color: var(--dim);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logrow .lvl {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.logrow .lvl.debug {
+  color: var(--faint);
+}
+
+.logrow .lvl.info {
+  color: var(--dim);
+}
+
+.logrow .lvl.warn {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.logrow .lvl.error {
+  color: var(--err);
+  font-weight: 700;
+}
+
+.logrow .msg {
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.logrow.is-debug .msg {
+  color: var(--dim);
+}
+
+.logrow.is-warn .msg {
+  color: #e8d5b0;
+}
+
+.logrow.is-error {
+  background: rgba(255, 92, 83, 0.06);
+}
+
+.logrow.is-error .msg {
+  color: #ffb3ad;
+}
+
+.logrow.selected {
+  background: #121a12;
+  box-shadow: inset 2px 0 0 var(--phos);
+}
+
+.logrow .caret {
+  display: inline-block;
+  width: 10px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.logrow .ctxprev {
+  color: var(--faint);
+}
+
+.logrow .trace {
+  color: var(--phos);
+  opacity: 0.75;
+  font-size: 10.5px;
+  margin-left: 8px;
+  cursor: pointer;
+}
+
+.logrow .trace::before {
+  content: '⌁';
+  margin-right: 2px;
+}
+
+.logrow .pin {
+  color: var(--amber);
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.loading-row {
+  padding: 8px 20px;
+}
+
+/* ── session detail: expanded ctx panel ────── */
+.ctxpanel {
+  grid-column: 1 / -1;
+  margin: 2px 0 4px 84px;
+  padding: 8px 14px;
+  border-left: 2px solid var(--err);
+  background: #0e0c0a;
+  font-size: 11.5px;
+  line-height: 17px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--dim);
+  cursor: default;
+}
+
+.ctxpanel .k {
+  color: var(--violet);
+}
+
+.ctxpanel .s {
+  color: var(--phos);
+}
+
+.ctxpanel .n {
+  color: var(--amber);
+}
+
+.ctxpanel .actions {
+  margin-top: 6px;
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.ctxpanel .actions span {
+  border: 1px solid var(--faint);
+  border-radius: 2px;
+  padding: 0 6px;
+  margin-right: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ── session detail: status bar ────────────── */
+footer .paused {
+  color: var(--amber);
+  cursor: pointer;
 }
