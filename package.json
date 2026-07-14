@@ -1,0 +1,21 @@
+{
+  "name": "deblog",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "tsx packages/server/src/index.ts",
+    "demo": "tsx examples/demo.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p packages/server && tsc -p packages/client --noEmit"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
