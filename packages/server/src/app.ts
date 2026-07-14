@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
+import { once } from 'node:events'
 import type { Db } from './db.js'
 import { normalizeEvent, type NormalizedEvent } from './normalize.js'
 import { insertBatch, type StoredEvent } from './ingest.js'
@@ -109,7 +110,7 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     return queryEvents(db, id, parseFilters(req.query as Record<string, unknown>))
   })
 
-  app.get('/api/sessions/:id/export.ndjson', (req, reply) => {
+  app.get('/api/sessions/:id/export.ndjson', async (req, reply) => {
     const { id } = req.params as { id: string }
     const filters = parseFilters(req.query as Record<string, unknown>)
     reply.hijack()
@@ -119,8 +120,13 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     })
     let after = filters.after_seq
     for (;;) {
+      if (reply.raw.destroyed) break
       const { events, next_after_seq } = queryEvents(db, id, { ...filters, after_seq: after, limit: 5000 })
-      for (const ev of events) reply.raw.write(JSON.stringify(ev) + '\n')
+      for (const ev of events) {
+        if (!reply.raw.write(JSON.stringify(ev) + '\n') && !reply.raw.destroyed) {
+          await once(reply.raw, 'drain')
+        }
+      }
       if (next_after_seq === null) break
       after = next_after_seq
     }
@@ -133,7 +139,7 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     return reply.code(204).send()
   })
 
-  app.get('/api/sessions/:id/stream', (req, reply) => {
+  app.get('/api/sessions/:id/stream', async (req, reply) => {
     const { id } = req.params as { id: string }
     const q = req.query as Record<string, unknown>
     const afterSeq = num(q.after_seq) ?? 0
@@ -150,33 +156,44 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     // there's nothing to replay yet.
     reply.raw.flushHeaders()
 
+    // Live-path writes (this callback, the heartbeat) stay fire-and-forget:
+    // they're event-driven and small, and a slow client is eventually
+    // disconnected by its own reading pace. Only the replay loop below
+    // awaits drain, since it can synchronously push an unbounded backlog.
     let lastSeq = afterSeq
-    const write = (ev: StoredEvent): void => {
-      if (ev.seq <= lastSeq) return
-      reply.raw.write(`event: log\ndata: ${JSON.stringify(ev)}\n\n`)
+    const write = (ev: StoredEvent): boolean => {
+      if (ev.seq <= lastSeq) return true
       lastSeq = ev.seq
+      return reply.raw.write(`event: log\ndata: ${JSON.stringify(ev)}\n\n`)
     }
 
-    // Subscribe before replay; ingest and replay are both synchronous on this
-    // event loop, so nothing can interleave, and the seq guard in write()
-    // makes any overlap harmless anyway.
+    // Subscribe before replay; ingest and replay interleave with the (now
+    // async) replay loop below, but the seq guard in write() makes any
+    // overlap harmless — events are only ever forwarded once, in order.
     const unsubscribe = hub.subscribe(id, (events) => {
       for (const ev of events) write(ev)
     })
 
-    let after = afterSeq
-    for (;;) {
-      const { events, next_after_seq } = queryEvents(db, id, { after_seq: after, limit: 5000 })
-      for (const ev of events) write(ev)
-      if (next_after_seq === null) break
-      after = next_after_seq
-    }
-
+    // Wire up cleanup before the replay loop (not after): the loop can now
+    // await 'drain', so the client may disconnect mid-replay. Registering
+    // the close handler first ensures the hub subscription and heartbeat
+    // are always torn down instead of leaking on an early disconnect.
     const hb = setInterval(() => reply.raw.write(': hb\n\n'), 15_000)
     req.raw.on('close', () => {
       clearInterval(hb)
       unsubscribe()
     })
+
+    let after = afterSeq
+    for (;;) {
+      if (reply.raw.destroyed) break
+      const { events, next_after_seq } = queryEvents(db, id, { after_seq: after, limit: 5000 })
+      for (const ev of events) {
+        if (!write(ev) && !reply.raw.destroyed) await once(reply.raw, 'drain')
+      }
+      if (next_after_seq === null) break
+      after = next_after_seq
+    }
   })
 
   return app
