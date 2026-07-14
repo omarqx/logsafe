@@ -98,4 +98,40 @@ describe('Minimap', () => {
     expect(onJumpToError).toHaveBeenCalledWith(77)
     expect(onJump).not.toHaveBeenCalled()
   })
+
+  it('does not let a gesture started on an error mark fall through into a strip scrub mid-drag', () => {
+    // Regression for: press an error mark (onJumpToError fires, correctly),
+    // then — without releasing — the pointer moves onto the strip itself.
+    // Before the fix, the strip's onPointerMove had no idea the gesture
+    // started on a mark (stopPropagation only blocked the *down* event) and
+    // would call onJump, silently overriding the error jump.
+    const onJump = vi.fn()
+    const onJumpToError = vi.fn()
+    const { container } = render(
+      <Minimap
+        bins={[]}
+        errors={[{ top: 40, seq: 77 }]}
+        viewportTop={0}
+        viewportHeight={100}
+        onJump={onJump}
+        onJumpToError={onJumpToError}
+      />,
+    )
+    const mark = container.querySelector('.mm-err-hit') as HTMLElement
+    const strip = container.querySelector('.minimap') as HTMLElement
+
+    mark.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 }))
+    expect(onJumpToError).toHaveBeenCalledWith(77)
+
+    // Same gesture (same pointerId) continues onto the strip — must be suppressed.
+    strip.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, buttons: 1 }))
+    expect(onJump).not.toHaveBeenCalled()
+
+    // Ending that gesture clears the suppression for its pointerId...
+    strip.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }))
+
+    // ...so a later, unrelated move with the same pointerId scrubs normally again.
+    strip.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, buttons: 1 }))
+    expect(onJump).toHaveBeenCalled()
+  })
 })

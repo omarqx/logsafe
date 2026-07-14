@@ -123,6 +123,10 @@ describe('useEventStream: progressive load', () => {
 describe('useEventStream: filtered SSE tail', () => {
   it('appends matching live events; drops non-matching but they still advance the resume cursor used on reconnect', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 1 })], next_after_seq: null }))
+    // A filter is active, so load() also probes getSession (see the
+    // "bounded SSE replay" describe block below) — 404 it so the probe is
+    // skipped and this test's own fetch-call assertions stay untouched.
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 404))
 
     const apiParams = new URLSearchParams({ ns: 'auth:*' })
     const { result } = renderHook(() => useEventStream('s1', apiParams, []))
@@ -202,6 +206,10 @@ describe('useEventStream: refetch on filter change', () => {
 
   it('reloads automatically when apiParams content changes between renders', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 1 })], next_after_seq: null }))
+    // A filter is active both times below, so each load() also probes
+    // getSession — 404 it so the probe is skipped (see the "bounded SSE
+    // replay" describe block below for that behavior's own tests).
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 404))
     const { result, rerender } = renderHook(
       ({ params }: { params: URLSearchParams }) => useEventStream('s1', params, []),
       { initialProps: { params: new URLSearchParams({ level: 'info' }) } },
@@ -210,6 +218,7 @@ describe('useEventStream: refetch on filter change', () => {
     expect(result.current[0].events.map((e) => e.seq)).toEqual([1])
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 9 })], next_after_seq: null }))
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 404))
     rerender({ params: new URLSearchParams({ level: 'error' }) })
     await act(async () => flush())
 
@@ -351,6 +360,23 @@ describe('useEventStream: pins', () => {
     expect(result.current[0].pinned).toEqual([])
   })
 
+  it('leaves a pin unresolved when after_seq=seq-1&limit=1 resolves to a different (higher) seq — e.g. the requested event was deleted or the session was recreated with a gap', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 1 })], next_after_seq: null }))
+    const { result, rerender } = renderHook(
+      ({ pins }: { pins: number[] }) => useEventStream('s1', new URLSearchParams(), pins),
+      { initialProps: { pins: [] as number[] } },
+    )
+    await act(async () => flush())
+
+    // Pin seq 50, which was never loaded — the direct fetch (after_seq=49)
+    // comes back with a *different*, higher-seq event (50 doesn't exist).
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 73 })], next_after_seq: null }))
+    rerender({ pins: [50] })
+    await act(async () => flush())
+
+    expect(result.current[0].pinned).toEqual([])
+  })
+
   it('resolves correctly when the pin set grows while an earlier pin fetch is still in flight', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 1 })], next_after_seq: null }))
     let resolveStalePinFetch: (v: Response) => void = () => {}
@@ -380,6 +406,54 @@ describe('useEventStream: pins', () => {
     await act(async () => flush())
 
     expect(result.current[0].pinned.map((e) => e.seq)).toEqual([99, 100])
+  })
+})
+
+describe('useEventStream: bounded SSE replay for sparse/empty filtered loads', () => {
+  it('probes the session tail and fast-forwards the resume cursor when a filter matches nothing', async () => {
+    // Filtered load matches 0 events — lastSeqRef would otherwise stay 0.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [], next_after_seq: null }))
+    // getSession(id) — the probe's source of the session's own last_ts.
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: 's1',
+        label: null,
+        first_ts: 0,
+        last_ts: 999,
+        duration_ms: 999,
+        status: 'idle',
+        event_count: 100_000,
+        error_count: 0,
+        warn_count: 0,
+        sources: ['webapp'],
+      }),
+    )
+    // The one unfiltered probe request: first event at from_ts=last_ts.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 100_000 })], next_after_seq: null }))
+
+    const apiParams = new URLSearchParams({ ns: 'nothing-matches:*' })
+    const { result } = renderHook(() => useEventStream('s1', apiParams, []))
+    await act(async () => flush())
+
+    expect(result.current[0].loading).toBe(false)
+    expect(result.current[0].events).toEqual([])
+    expect(instances).toHaveLength(1)
+    expect(instances[0].url).toBe('/api/sessions/s1/stream?after_seq=100000')
+
+    const probeCall = fetchMock.mock.calls.map((c) => c[0] as string).find((u) => u.includes('from_ts'))
+    expect(probeCall).toBe('/api/sessions/s1/events?from_ts=999&limit=1')
+  })
+
+  it('does not probe when no filter is active', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [], next_after_seq: null }))
+    const { result } = renderHook(() => useEventStream('s1', new URLSearchParams(), []))
+    await act(async () => flush())
+
+    expect(result.current[0].loading).toBe(false)
+    // Only the one page-load call — no getSession, no probe.
+    expect(fetchMock.mock.calls).toHaveLength(1)
+    expect(instances).toHaveLength(1)
+    expect(instances[0].url).toBe('/api/sessions/s1/stream?after_seq=0')
   })
 })
 

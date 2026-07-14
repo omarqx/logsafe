@@ -25,6 +25,15 @@ export interface MinimapProps {
 
 export function Minimap({ bins, errors, viewportTop, viewportHeight, onJump, onJumpToError }: MinimapProps) {
   const stripRef = useRef<HTMLDivElement>(null)
+  // pointerId of a gesture that started on an error mark, or null. An error
+  // mark's onPointerDown stops propagation so the strip's own
+  // handlePointerDown never fires for that press — but without this, moving
+  // the pointer off the mark mid-drag would still hit the strip's
+  // onPointerMove directly (no propagation involved there) and start
+  // scrubbing, silently turning "click an error" into "click an error, then
+  // jump somewhere else" the moment the hand shakes. Tracked by pointerId
+  // (not a boolean) so an unrelated second pointer isn't affected.
+  const suppressScrubForPointerRef = useRef<number | null>(null)
 
   const fractionFromClientY = useCallback((clientY: number) => {
     const el = stripRef.current
@@ -36,6 +45,7 @@ export function Minimap({ bins, errors, viewportTop, viewportHeight, onJump, onJ
 
   const handlePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (suppressScrubForPointerRef.current === e.pointerId) return
       e.currentTarget.setPointerCapture(e.pointerId)
       onJump(fractionFromClientY(e.clientY))
     },
@@ -46,10 +56,19 @@ export function Minimap({ bins, errors, viewportTop, viewportHeight, onJump, onJ
     (e: ReactPointerEvent<HTMLDivElement>) => {
       // Only scrub while the primary button is held (drag), not on hover.
       if (e.buttons !== 1) return
+      if (suppressScrubForPointerRef.current === e.pointerId) return
       onJump(fractionFromClientY(e.clientY))
     },
     [fractionFromClientY, onJump],
   )
+
+  // Ends the suppressed gesture regardless of where the pointer lands (it
+  // may no longer be over the mark that started it).
+  const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (suppressScrubForPointerRef.current === e.pointerId) {
+      suppressScrubForPointerRef.current = null
+    }
+  }, [])
 
   return (
     <div
@@ -57,6 +76,8 @@ export function Minimap({ bins, errors, viewportTop, viewportHeight, onJump, onJ
       ref={stripRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       <div className="cap">MAP</div>
       <div className="mm-density">
@@ -74,6 +95,7 @@ export function Minimap({ bins, errors, viewportTop, viewportHeight, onJump, onJ
             // Larger hit area than the visual bar; jump straight to this
             // error rather than the generic proportional-fraction jump.
             e.stopPropagation()
+            suppressScrubForPointerRef.current = e.pointerId
             onJumpToError(mark.seq)
           }}
         >

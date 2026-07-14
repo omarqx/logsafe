@@ -11,9 +11,10 @@ import { getSession, type SessionSummary, type StoredEvent } from '../api'
 import { useUrlState } from '../hooks/useUrlState'
 import { useEventStream } from '../hooks/useEventStream'
 import { filtersFromSearch, filtersToSearch, filtersToApiParams, toggleErrorLevel, type Filters } from '../lib/filters'
-import { formatTs, formatDuration, type TsMode } from '../lib/time'
+import { formatTs, formatDuration, parseTsMode, type TsMode } from '../lib/time'
 import { sourceColorIndex } from '../lib/sources'
 import { binEvents, minimapFractionToIndex, type MinimapBin } from '../lib/minimap'
+import { isModifierKeyEvent } from '../lib/keyboard'
 import { CmdBar } from '../components/CmdBar'
 import { LogRow } from '../components/LogRow'
 import { PinnedStrip } from '../components/PinnedStrip'
@@ -25,6 +26,9 @@ const OVERSCAN = 40
 const SESSION_POLL_MS = 5000
 const TS_ORDER: TsMode[] = ['abs', 'rel', 'delta']
 const MINIMAP_BIN_COUNT = 60
+// How far above the bottom (px) a non-programmatic scroll must land before
+// it counts as "the user scrolled up" for onStreamScroll (item 3, see there).
+const PAUSE_DISTANCE_FROM_BOTTOM_PX = 40
 // binEvents does an O(n) pass over the full event list. `state.events` gets a
 // new array identity on every SSE tail frame while live, so recomputing on
 // every render would make the minimap an O(n)-per-incoming-event cost during
@@ -39,19 +43,35 @@ interface MinimapData {
   errors: MinimapErrorMark[]
 }
 
-function computeMinimapData(events: StoredEvent[]): MinimapData {
+// A 0.25%-tall slot along the strip; ~400 slots fit a 30px-tall minimap
+// (way finer than a mark is visually distinguishable at), so quantizing to
+// this grid for dedup below is visually lossless.
+const ERROR_MARK_SLOT_PCT = 0.25
+
+export function computeMinimapData(events: StoredEvent[]): MinimapData {
   const { bins, errors } = binEvents(events, MINIMAP_BIN_COUNT)
   // binEvents pushes an error mark, in event order, for every 'error'-level
   // event but only returns its `top` position (it's a pure ts/level ->
   // geometry mapping with no knowledge of StoredEvent's seq field) — zip the
   // marks back up with the seq of the error event at the same ordinal
   // position so the minimap can show/jump to a specific seq.
+  //
+  // Dedupe by quantized `top`: an error storm (e.g. a retry loop logging
+  // hundreds/thousands of errors within one bin's time span) would otherwise
+  // render one DOM node per error event, unbounded. Keep only the first
+  // (earliest seq) mark per slot — ≤ 400 slots means ≤ 400 nodes regardless
+  // of how many error events share a position.
   const marks: MinimapErrorMark[] = []
+  const seenSlots = new Set<number>()
   let mi = 0
   for (const ev of events) {
     if (ev.level === 'error') {
-      marks.push({ top: errors[mi]!.top, seq: ev.seq })
+      const top = errors[mi]!.top
       mi++
+      const slot = Math.round(top / ERROR_MARK_SLOT_PCT)
+      if (seenSlots.has(slot)) continue
+      seenSlots.add(slot)
+      marks.push({ top, seq: ev.seq })
     }
   }
   return { bins, errors: marks }
@@ -84,7 +104,7 @@ export function SessionDetailPage() {
   // session poll — forcing every visible row to re-render).
   const filters = useMemo(() => filtersFromSearch(params), [params])
   const apiParams = filtersToApiParams(filters)
-  const tsMode = ((params.get('ts') as TsMode | null) ?? 'rel') as TsMode
+  const tsMode = parseTsMode(params.get('ts'))
   const pinSeqs = useMemo(() => parseSeqList(params.get('pin')), [params])
   const selSeq = params.get('sel') ? Number(params.get('sel')) : null
 
@@ -108,8 +128,12 @@ export function SessionDetailPage() {
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const s = await getSession(id)
-      if (!cancelled) setSession(s)
+      try {
+        const s = await getSession(id)
+        if (!cancelled) setSession(s)
+      } catch (err) {
+        console.error('[deblog] failed to load session:', err)
+      }
     }
     void load()
     const iv = setInterval(() => void load(), SESSION_POLL_MS)
@@ -229,23 +253,91 @@ export function SessionDetailPage() {
     estimateSize: () => ROW_H,
     overscan: OVERSCAN,
   })
+  // The virtualizer measures each row's *real* height as it mounts
+  // (measureElement/ResizeObserver) and this updates on every such
+  // measurement — not just when state.events.length changes — which is
+  // exactly what the stick-to-bottom effect below needs to depend on: a
+  // row's real height can differ from the ROW_H estimate, so the total
+  // content height keeps changing for a few renders after events first
+  // load, independently of the event count itself. Read once and reused
+  // (JSX height below, minimap geometry further down) instead of calling
+  // getTotalSize() repeatedly per render.
+  const totalSize = rowVirtualizer.getTotalSize()
 
-  // Stick to bottom while tail is live: whenever the event count grows (or
-  // tail flips back to live), snap the scroll position to the end.
+  // True while a scrollTop write below is *our own* stick-to-bottom
+  // correction, not the user. onStreamScroll reads this to tell "we just
+  // snapped to bottom" apart from "the user moved the scrollbar/PageUp/
+  // touch themselves" — see there for why the wheel handler alone doesn't
+  // catch every user-driven scroll.
+  const programmaticScrollRef = useRef(false)
+  // Mirrors state.tail for the fonts.ready effect further down, which
+  // deliberately has an empty dep array (fonts.ready only ever resolves
+  // once) and so can't close over state.tail directly without seeing a
+  // stale value from whenever the component first mounted.
+  const tailStateRef = useRef(state.tail)
+  useEffect(() => {
+    tailStateRef.current = state.tail
+  }, [state.tail])
+
+  // Stick to bottom while tail is live: whenever the content height changes
+  // (new events arrive, tail flips back to live, or a row's *measured*
+  // height turns out to differ from the ROW_H estimate — see `totalSize`
+  // above), snap the scroll position to the end.
   useEffect(() => {
     if (state.tail !== 'live') return
     const el = streamRef.current
     if (!el) return
+    programmaticScrollRef.current = true
     el.scrollTop = el.scrollHeight
-  }, [state.events.length, state.tail])
+    // The 'scroll' event this write triggers (if scrollTop actually moved)
+    // is asynchronous — consumed by the *next* scroll event in
+    // onStreamScroll below, whenever it lands, rather than time-boxed here.
+    // This rAF is only a fallback for when the write didn't move scrollTop
+    // at all (already at bottom), so no 'scroll' event fires to consume it.
+    const raf = requestAnimationFrame(() => {
+      programmaticScrollRef.current = false
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [totalSize, state.tail])
+
+  // Fonts (@fontsource/jetbrains-mono, self-hosted, loaded async) can swap
+  // in after first paint and shift every element's line-height/metrics —
+  // including the header/toolbar rows above .stream — which changes
+  // .stream's own clientHeight (not something `totalSize` above observes,
+  // since that only tracks the virtualizer's row measurements). Re-snap
+  // once more when fonts finish loading so that late shift doesn't leave a
+  // live tail short of the true bottom. One-shot and cheap: `fonts.ready`
+  // resolves once and stays resolved for the tab's lifetime.
+  useEffect(() => {
+    let cancelled = false
+    void document.fonts?.ready?.then(() => {
+      if (cancelled) return
+      if (tailStateRef.current !== 'live') return
+      const el = streamRef.current
+      if (!el) return
+      programmaticScrollRef.current = true
+      el.scrollTop = el.scrollHeight
+      requestAnimationFrame(() => {
+        programmaticScrollRef.current = false
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+    // Deliberately runs once (mount only): fonts.ready resolves once per
+    // page lifetime, and re-subscribing per state.tail change would be
+    // pointless (the promise is already settled after the first resolution)
+    // — tailStateRef (not a dependency) is what keeps the *check* current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // "Any upward scroll -> pause()", read directly off the wheel gesture
-  // rather than off scrollTop deltas: the virtualizer's dynamic row
-  // remeasurement (measureElement/ResizeObserver) can shrink the total
-  // content size by sub-pixel amounts as rows settle, which makes the
-  // browser silently clamp scrollTop *down* on its own — a scrollTop-delta
-  // check misreads that as the user scrolling up and pauses on every load.
-  // A negative wheel deltaY is an unambiguous, directly user-driven signal.
+  // rather than off scrollTop/distance-from-bottom: it's an unambiguous,
+  // directly user-driven signal, so it doesn't need the
+  // programmaticScrollRef bookkeeping the scroll-position check below does
+  // to avoid mistaking our own stick-to-bottom corrections for the user
+  // scrolling up. Kept alongside that check (harmless, and reacts a tick
+  // faster than waiting for the resulting 'scroll' event).
   const onStreamWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       if (e.deltaY < 0 && state.tail === 'live') {
@@ -254,6 +346,33 @@ export function SessionDetailPage() {
     },
     [state.tail, pause],
   )
+
+  // Catches every other way to scroll up that the wheel handler above
+  // misses: dragging the scrollbar thumb, PageUp/Home, touch scroll, or a
+  // trackpad gesture that doesn't fire 'wheel'. Any 'scroll' event that
+  // wasn't caused by our own stick-to-bottom write (programmaticScrollRef)
+  // and that leaves the viewport more than ~40px above the bottom, while
+  // the tail is live, pauses — otherwise stick-to-bottom would just snap it
+  // right back on the next incoming event, making those gestures a no-op.
+  const onStreamScroll = useCallback(() => {
+    if (programmaticScrollRef.current) {
+      // Consume: this is (almost certainly) the event our own write above
+      // triggered, whether it arrived before or after that effect's rAF
+      // fallback already cleared the flag — either way it's the one event
+      // we meant to ignore. Not a plain time-boxed ignore-window, which
+      // would either race the event (too short) or risk swallowing a fast
+      // real user scroll that follows immediately (too long).
+      programmaticScrollRef.current = false
+      return
+    }
+    if (state.tail !== 'live') return
+    const el = streamRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (distanceFromBottom > PAUSE_DISTANCE_FROM_BOTTOM_PX) {
+      pause()
+    }
+  }, [state.tail, pause])
 
   // --- keyboard map (constraints minus minimap, owned by Task 6) -------
 
@@ -329,6 +448,10 @@ export function SessionDetailPage() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // Let Cmd/Ctrl/Alt-combos (Cmd+F find-in-page, Cmd+P print, ...)
+      // reach the browser instead of being intercepted by single-letter app
+      // shortcuts below (e.g. 'f' would otherwise steal focus from Cmd+F).
+      if (isModifierKeyEvent(e)) return
       if (e.key === 'Escape') {
         ;(document.activeElement as HTMLElement | null)?.blur()
         return
@@ -428,15 +551,13 @@ export function SessionDetailPage() {
   // stick-to-bottom scroll behavior) rather than trusting the virtualizer's
   // scrollOffset, which can lag a frame behind a just-arrived tail row
   // before the stick-to-bottom effect commits the scrollTop write.
-  const minimapTotalSize = rowVirtualizer.getTotalSize()
   const minimapViewportPx = rowVirtualizer.scrollRect?.height ?? 0
-  const minimapViewportHeight =
-    minimapTotalSize > 0 ? Math.min(100, (minimapViewportPx / minimapTotalSize) * 100) : 100
+  const minimapViewportHeight = totalSize > 0 ? Math.min(100, (minimapViewportPx / totalSize) * 100) : 100
   const minimapViewportTop =
     state.tail === 'live'
       ? Math.max(0, 100 - minimapViewportHeight)
-      : minimapTotalSize > 0
-        ? ((rowVirtualizer.scrollOffset ?? 0) / minimapTotalSize) * 100
+      : totalSize > 0
+        ? ((rowVirtualizer.scrollOffset ?? 0) / totalSize) * 100
         : 0
 
   return (
@@ -484,7 +605,7 @@ export function SessionDetailPage() {
       />
 
       <div className="stream-wrap">
-        <div className="stream" ref={streamRef} onWheel={onStreamWheel}>
+        <div className="stream" ref={streamRef} onWheel={onStreamWheel} onScroll={onStreamScroll}>
           {state.loading && <div className="loading-row">loading…</div>}
           {state.error && <div className="loading-row">error: {state.error}</div>}
           {!state.loading && !state.error && state.events.length === 0 && (
@@ -493,7 +614,7 @@ export function SessionDetailPage() {
             </div>
           )}
           {!state.loading && !state.error && state.events.length > 0 && (
-            <div style={{ position: 'relative', height: rowVirtualizer.getTotalSize() }}>
+            <div style={{ position: 'relative', height: totalSize }}>
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const ev: StoredEvent = state.events[virtualRow.index]
                 const prevTs = virtualRow.index > 0 ? state.events[virtualRow.index - 1].ts : null

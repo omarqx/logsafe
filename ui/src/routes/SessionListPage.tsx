@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { listSessions, deleteSession, type SessionSummary } from '../api'
 import { formatDuration, formatStarted } from '../lib/time'
 import { sourceColorIndex } from '../lib/sources'
+import { isModifierKeyEvent } from '../lib/keyboard'
 
 const REFRESH_MS = 5000
 const DEBLOG_VERSION = 'v0.1.0'
@@ -52,14 +53,22 @@ export function SessionListPage() {
     async (s: SessionSummary) => {
       const label = s.label ?? s.id
       if (!window.confirm(`Delete session ${label}?`)) return
-      await deleteSession(s.id)
-      await refresh()
+      try {
+        await deleteSession(s.id)
+        await refresh()
+      } catch (err) {
+        console.error('[deblog] failed to delete session:', err)
+      }
     },
     [refresh],
   )
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // Let Cmd/Ctrl/Alt-combos reach the browser instead of being
+      // intercepted by single-letter shortcuts below (see SessionDetailPage
+      // for the matching guard/rationale).
+      if (isModifierKeyEvent(e)) return
       if (isActiveElementEditable()) return
       if (!sessions || sessions.length === 0) return
 

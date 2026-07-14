@@ -45,7 +45,11 @@ export function CtxPanel({ ev, sessionStart, onFilterTrace }: CtxPanelProps) {
   const recv = formatTs('rel', { ts: ev.received_at }, sessionStart, null)
 
   const copyJson = useCallback(() => {
-    void navigator.clipboard?.writeText(pretty)
+    // Optional chaining short-circuits the whole expression (including
+    // .catch) when clipboard is unavailable, so this is safe even then; the
+    // .catch itself guards against a real browser rejecting the write (e.g.
+    // permissions denied) turning into an unhandled promise rejection.
+    navigator.clipboard?.writeText(pretty).catch(() => {})
   }, [pretty])
 
   const filterTrace = useCallback(() => {

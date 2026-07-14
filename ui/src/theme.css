@@ -483,6 +483,14 @@ footer .right {
   overflow-y: auto;
   overflow-x: hidden;
   padding-top: 2px;
+  /* The virtualizer measures each row's real height as it mounts/resizes
+     (measureElement + ResizeObserver), which shifts content size above and
+     around the current viewport as rows settle. Without this, the browser's
+     scroll-anchoring feature "helpfully" adjusts scrollTop to compensate —
+     firing a genuine, browser-initiated 'scroll' event that's indistinguishable
+     from a user scrolling up, which falsely pauses the live tail on load/growth.
+     Virtualized lists own their own scroll position; let them. */
+  overflow-anchor: none;
 }
 
 .logrow {

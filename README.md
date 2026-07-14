@@ -6,9 +6,8 @@ deblog is a local debugging log server: point any app (or any HTTP client)
 at it and it collects log events into named **sessions**, stored in a local
 SQLite database. It groups related events (across multiple processes or
 sources — a browser tab and its backend, say) so you can filter, search, and
-tail them while you debug. A web UI for browsing sessions is coming in a
-later phase; for now everything is available over plain HTTP (see
-`API.md`).
+tail them while you debug. A web UI for browsing sessions is included (see
+below); everything is also available over plain HTTP (see `API.md`).
 
 ## Quickstart
 

@@ -70,6 +70,22 @@ describe('SPA fallback', () => {
     expect(res.json()).toEqual({ accepted: 1, rejected: 0 })
   })
 
+  it('GET /api/definitely-not-a-route -> 404 json via the notFound fallback', async () => {
+    app = await buildWithPublicDir()
+    const res = await app.inject({ method: 'GET', url: '/api/definitely-not-a-route' })
+    expect(res.statusCode).toBe(404)
+    expect(res.headers['content-type']).toContain('application/json')
+    expect(res.json()).toEqual({ error: 'not found' })
+  })
+
+  it('POST /some/unknown/path -> 404 json (non-GET never gets the HTML fallback)', async () => {
+    app = await buildWithPublicDir()
+    const res = await app.inject({ method: 'POST', url: '/some/unknown/path' })
+    expect(res.statusCode).toBe(404)
+    expect(res.headers['content-type']).toContain('application/json')
+    expect(res.json()).toEqual({ error: 'not found' })
+  })
+
   it('with no public dir, GET /s/x falls through to default 404 (no fallback registered)', async () => {
     const noPublicDb = openDb(':memory:')
     app = buildApp({ db: noPublicDb })

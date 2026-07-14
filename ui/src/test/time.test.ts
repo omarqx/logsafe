@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatTs, formatDuration, formatStarted } from '../lib/time'
+import { formatTs, formatDuration, formatStarted, parseTsMode } from '../lib/time'
 
 function localHHMMSSmmm(ts: number): string {
   const d = new Date(ts)
@@ -58,6 +58,24 @@ describe('formatDuration', () => {
   it('formats hour+ durations as Nh MMm, minutes zero-padded, no seconds', () => {
     expect(formatDuration(22_320_000)).toBe('6h 12m')
     expect(formatDuration(3_600_000)).toBe('1h 00m')
+  })
+})
+
+describe('parseTsMode', () => {
+  it('accepts the three known modes unchanged', () => {
+    expect(parseTsMode('abs')).toBe('abs')
+    expect(parseTsMode('rel')).toBe('rel')
+    expect(parseTsMode('delta')).toBe('delta')
+  })
+
+  it('falls back to "rel" for a missing param', () => {
+    expect(parseTsMode(null)).toBe('rel')
+  })
+
+  it('falls back to "rel" for an unknown/garbage value instead of rendering blank timestamps', () => {
+    expect(parseTsMode('')).toBe('rel')
+    expect(parseTsMode('bogus')).toBe('rel')
+    expect(parseTsMode('ABS')).toBe('rel')
   })
 })
 

@@ -7,7 +7,15 @@ import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 export interface UrlStateApi {
-  /** Current URL search params. New object identity each render, per react-router. */
+  /**
+   * Current URL search params. react-router memoizes this by
+   * `location.search`, so it keeps referential identity across re-renders
+   * that don't change the URL — callers can safely depend on it in
+   * `useMemo`/`useCallback` (e.g. SessionDetailPage's
+   * `useMemo(() => filtersFromSearch(params), [params])`) without those
+   * recomputing on every unrelated re-render. See useUrlState.test.tsx for
+   * the pinned-down behavior of the installed react-router version.
+   */
   params: URLSearchParams
   /**
    * Replace the URL search params. Defaults to `replace: true` (no new

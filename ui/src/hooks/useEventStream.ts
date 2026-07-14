@@ -5,7 +5,7 @@
 // has no filter params — see API.md — so every event is re-tested locally
 // with the exact same predicate the server uses, lib/predicate.ts).
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fetchEventsPage, type StoredEvent } from '../api'
+import { fetchEventsPage, getSession, type StoredEvent } from '../api'
 import { filtersFromSearch } from '../lib/filters'
 import { eventMatches } from '../lib/predicate'
 
@@ -47,7 +47,12 @@ export function useEventStream(
   const [events, setEvents] = useState<StoredEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [tail, setTail] = useState<'live' | 'paused'>('live')
-  const [pending, setPending] = useState<StoredEvent[]>([])
+  // The buffered-while-paused events themselves only ever need to be read
+  // once, on resume (via pendingRef) — nothing renders them individually,
+  // so state only tracks the count. Avoids `pendingRef.current = [...prev,
+  // parsed]` (a full-array copy, O(p) per event / O(p^2) over a pause) in
+  // favor of an in-place push below.
+  const [pendingCount, setPendingCount] = useState(0)
   const [pinned, setPinned] = useState<StoredEvent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
@@ -77,7 +82,7 @@ export function useEventStream(
     pendingRef.current = []
     lastSeqRef.current = 0
     setTail('live')
-    setPending([])
+    setPendingCount(0)
     eventsRef.current = []
     setEvents([])
     setError(null)
@@ -113,8 +118,8 @@ export function useEventStream(
         lastSeqRef.current = parsed.seq
         if (!eventMatches(filtersRef.current, parsed)) return
         if (tailRef.current === 'paused') {
-          pendingRef.current = [...pendingRef.current, parsed]
-          setPending(pendingRef.current)
+          pendingRef.current.push(parsed)
+          setPendingCount(pendingRef.current.length)
         } else {
           setEvents((prev) => {
             const next = [...prev, parsed]
@@ -149,6 +154,39 @@ export function useEventStream(
           after = page.next_after_seq
         }
         if (myGen !== genRef.current) return
+
+        // Bound SSE replay when a filter is active. The tail cursor
+        // (lastSeqRef) only ever advances to the last *matched* event's seq
+        // above — if the filter matches nothing (or only early events) that
+        // leaves lastSeqRef low, and /stream (which has no filter params,
+        // see the file header) would replay the entire rest of the session
+        // client-side on every filter change/reconnect. One extra unfiltered
+        // probe request bounds that: ask for the first event at the
+        // session's own last_ts (inclusive `from_ts` filter) — its seq is
+        // >= every event with an earlier ts, i.e. everything the filtered
+        // query above already had the chance to evaluate — and fast-forward
+        // the cursor to at least that point. Events sharing that exact final
+        // ts may be redelivered by SSE and re-run through the client-side
+        // predicate; that's safe (idempotent) and still bounded, vs.
+        // replaying the whole session.
+        if (apiParams.toString() !== '') {
+          const session = await getSession(sessionId)
+          if (myGen !== genRef.current) return
+          if (session) {
+            const probe = await fetchEventsPage(
+              sessionId,
+              new URLSearchParams([['from_ts', String(session.last_ts)]]),
+              undefined,
+              1,
+            )
+            if (myGen !== genRef.current) return
+            const probedSeq = probe.events[0]?.seq
+            if (probedSeq !== undefined) {
+              lastSeqRef.current = Math.max(lastSeqRef.current, probedSeq)
+            }
+          }
+        }
+
         eventsRef.current = acc
         setEvents(acc)
         setLoading(false)
@@ -232,7 +270,12 @@ export function useEventStream(
           const page = await fetchEventsPage(sessionId, new URLSearchParams(), seq - 1, 1)
           if (myGen !== genRef.current || myRun !== pinRunRef.current) return
           const resolved = page.events[0]
-          if (resolved) {
+          // after_seq=seq-1&limit=1 returns the *next* event after seq-1 —
+          // if `seq` itself was deleted (or the session was recreated with a
+          // gap), that's a different, higher-seq event, not the one asked
+          // for. Only accept an exact match; otherwise treat the pin as
+          // unresolved rather than silently substituting the wrong event.
+          if (resolved && resolved.seq === seq) {
             pinCacheRef.current.set(seq, resolved)
             results.push(resolved)
           }
@@ -268,15 +311,12 @@ export function useEventStream(
       eventsRef.current = next
       return next
     })
-    setPending([])
+    setPendingCount(0)
   }, [])
 
   const refetch = useCallback(() => {
     setReloadToken((t) => t + 1)
   }, [])
 
-  return [
-    { events, loading, tail, pendingCount: pending.length, pinned, error },
-    { pause, resume, refetch },
-  ]
+  return [{ events, loading, tail, pendingCount, pinned, error }, { pause, resume, refetch }]
 }

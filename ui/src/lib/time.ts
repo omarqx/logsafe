@@ -2,6 +2,18 @@
 
 export type TsMode = 'abs' | 'rel' | 'delta'
 
+const TS_MODES: readonly TsMode[] = ['abs', 'rel', 'delta']
+
+/**
+ * Validates the `ts=` URL param: any value other than a known TsMode
+ * (missing, stale link from an older build, hand-edited URL, ...) falls
+ * back to 'rel' instead of being cast through unchecked and rendering blank
+ * timestamps for the life of the page.
+ */
+export function parseTsMode(v: string | null): TsMode {
+  return TS_MODES.includes(v as TsMode) ? (v as TsMode) : 'rel'
+}
+
 function pad(n: number, width: number): string {
   return String(n).padStart(width, '0')
 }
