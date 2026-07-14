@@ -41,7 +41,14 @@ export function SessionDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const { params, setParams } = useUrlState()
 
-  const filters = filtersFromSearch(params)
+  // Memoized on `params` (react-router memoizes that object by
+  // location.search, see useUrlState.ts), not recomputed fresh every
+  // render: a plain `filtersFromSearch(params)` call here made a new object
+  // every render regardless of whether the URL changed, which defeated
+  // `React.memo` on LogRow (see handleTraceClick below, whose `[filters,
+  // updateFilters]` deps churned every render — every SSE tail event/5s
+  // session poll — forcing every visible row to re-render).
+  const filters = useMemo(() => filtersFromSearch(params), [params])
   const apiParams = filtersToApiParams(filters)
   const tsMode = ((params.get('ts') as TsMode | null) ?? 'rel') as TsMode
   const pinSeqs = useMemo(() => parseSeqList(params.get('pin')), [params])
@@ -52,6 +59,12 @@ export function SessionDetailPage() {
   const [lastFetchMs, setLastFetchMs] = useState<number | null>(null)
 
   const [state, api] = useEventStream(id, apiParams, pinSeqs)
+  // useEventStream returns a fresh `{ pause, resume, refetch }` object
+  // literal every render even though the functions themselves are stable
+  // (useCallback with empty deps in the hook) — depending on `api` as a
+  // whole in a useCallback/useEffect dep array reintroduces the same churn
+  // filters just fixed above. Depend on the individual functions instead.
+  const { pause, resume } = api
 
   const cmdInputRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<HTMLDivElement>(null)
@@ -171,8 +184,8 @@ export function SessionDetailPage() {
   const resumeAndScrollBottom = useCallback(() => {
     const el = streamRef.current
     if (el) el.scrollTop = el.scrollHeight
-    api.resume()
-  }, [api])
+    resume()
+  }, [resume])
 
   // --- virtualization + scroll behavior --------------------------------
 
@@ -202,13 +215,23 @@ export function SessionDetailPage() {
   const onStreamWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       if (e.deltaY < 0 && state.tail === 'live') {
-        api.pause()
+        pause()
       }
     },
-    [state.tail, api],
+    [state.tail, pause],
   )
 
   // --- keyboard map (constraints minus minimap, owned by Task 6) -------
+
+  // Mirrors state.events for the keydown handler below without making that
+  // effect re-subscribe (teardown + re-add the document listener) on every
+  // SSE tail frame: state.events gets a new array identity on every
+  // incoming event while live, and the handler only ever needs the latest
+  // array at keypress time, not a reactive subscription to it.
+  const eventsRef = useRef(state.events)
+  useEffect(() => {
+    eventsRef.current = state.events
+  }, [state.events])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -226,12 +249,21 @@ export function SessionDetailPage() {
           return
         case 'j':
         case 'k': {
-          if (state.events.length === 0) return
+          const events = eventsRef.current
+          if (events.length === 0) return
           e.preventDefault()
-          const idx = state.events.findIndex((ev) => ev.seq === selSeq)
+          const idx = events.findIndex((ev) => ev.seq === selSeq)
           const base = idx === -1 ? 0 : idx
-          const nextIdx = e.key === 'j' ? Math.min(base + 1, state.events.length - 1) : Math.max(base - 1, 0)
-          setSelSeq(state.events[nextIdx].seq)
+          const nextIdx = e.key === 'j' ? Math.min(base + 1, events.length - 1) : Math.max(base - 1, 0)
+          setSelSeq(events[nextIdx].seq)
+          // Pause the live tail before moving the view: otherwise the
+          // stick-to-bottom effect snaps scrollTop back to the bottom on
+          // the next tail event, discarding this navigation. Always pause
+          // while live rather than special-casing "already at the bottom
+          // row" (which technically wouldn't need it) — detecting that
+          // cheaply isn't worth the complexity; selection still moves via
+          // setSelSeq either way.
+          if (state.tail === 'live') pause()
           rowVirtualizer.scrollToIndex(nextIdx, { align: 'auto' })
           return
         }
@@ -260,7 +292,12 @@ export function SessionDetailPage() {
           return
         case 'g':
           e.preventDefault()
-          if (state.events.length > 0) rowVirtualizer.scrollToIndex(0, { align: 'start' })
+          if (eventsRef.current.length > 0) {
+            // Same reasoning as j/k above: pause live tail before the jump
+            // so stick-to-bottom doesn't immediately undo it.
+            if (state.tail === 'live') pause()
+            rowVirtualizer.scrollToIndex(0, { align: 'start' })
+          }
           return
         case 'G':
           e.preventDefault()
@@ -273,8 +310,9 @@ export function SessionDetailPage() {
 
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
+    // state.events is deliberately excluded — see eventsRef above. state.tail
+    // and pause are included since j/k/g now read/call them directly.
   }, [
-    state.events,
     selSeq,
     tsMode,
     filters,
@@ -284,6 +322,8 @@ export function SessionDetailPage() {
     setSelSeq,
     rowVirtualizer,
     resumeAndScrollBottom,
+    state.tail,
+    pause,
   ])
 
   const activeChipCount = Object.values(filters).filter((v) => Boolean(v)).length
