@@ -20,12 +20,14 @@ export function scratchSessionId(now: number): string {
   return `scratch-${new Date(now).toISOString().slice(0, 10)}`
 }
 
-/** Returns null only for unsalvageable events: not a plain object, or no msg.
+/** Returns null only for unsalvageable events: not a plain object, or missing/empty msg.
     Everything else is coerced — a log tool must not reject logs it can salvage. */
 export function normalizeEvent(raw: unknown, now: number): NormalizedEvent | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
   const r = raw as Record<string, unknown>
-  if (typeof r.msg !== 'string' || r.msg === '') return null
+  if (r.msg === undefined || r.msg === null) return null
+  const msg = typeof r.msg === 'string' ? r.msg : JSON.stringify(r.msg) ?? String(r.msg)
+  if (msg === '') return null
 
   let ts = now
   if (typeof r.ts === 'number' && Number.isFinite(r.ts)) ts = Math.trunc(r.ts)
@@ -59,8 +61,8 @@ export function normalizeEvent(raw: unknown, now: number): NormalizedEvent | nul
     source: str(r.source) ?? 'default',
     ns: typeof r.ns === 'string' ? r.ns : '',
     level,
-    msg: r.msg,
-    ctx: ctxValue === undefined ? null : JSON.stringify(ctxValue),
+    msg,
+    ctx: ctxValue === undefined || ctxValue === null ? null : JSON.stringify(ctxValue),
     trace: str(r.trace),
     session_label: str(r.session_label),
   }

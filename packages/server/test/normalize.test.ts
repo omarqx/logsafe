@@ -10,7 +10,17 @@ describe('normalizeEvent', () => {
     expect(normalizeEvent([{ msg: 'x' }], NOW)).toBeNull()
     expect(normalizeEvent({}, NOW)).toBeNull()
     expect(normalizeEvent({ msg: '' }, NOW)).toBeNull()
+    expect(normalizeEvent({ msg: null }, NOW)).toBeNull()
     expect(normalizeEvent({ msg: 'x' }, NOW)).not.toBeNull()
+  })
+
+  it('coerces non-string msg instead of rejecting', () => {
+    expect(normalizeEvent({ msg: 42 }, NOW)!.msg).toBe('42')
+    expect(normalizeEvent({ msg: { code: 500 } }, NOW)!.msg).toBe('{"code":500}')
+  })
+
+  it('explicit ctx: null stores null, not the string "null"', () => {
+    expect(normalizeEvent({ msg: 'x', ctx: null }, NOW)!.ctx).toBeNull()
   })
 
   it('applies defaults: source, ns, level, ts, scratch session', () => {
