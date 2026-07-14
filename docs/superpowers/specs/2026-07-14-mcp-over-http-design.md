@@ -57,10 +57,15 @@ contract is the single API." A loopback self-request is microseconds.
    `sessionIdGenerator: undefined`; a new `McpServer`+transport per request.
 2. **On by default.** Every `logsafe` server hosts `/mcp`. No flag, matching
    the loopback/no-auth/zero-config posture.
-3. **DNS-rebinding protection ON.** Enable the transport's
-   `enableDnsRebindingProtection` with `allowedHosts: ['127.0.0.1', 'localhost']`
-   (and their `:PORT` forms). Cheap hardening for an unauthenticated
-   loopback endpoint that ships publicly.
+3. **DNS-rebinding guard via an explicit host/origin check.** The transport's
+   built-in `enableDnsRebindingProtection`/`allowedHosts` options are
+   `@deprecated` in the installed SDK ("use external middleware instead"), so
+   the `/mcp` route does its own tiny preflight before handing off to the
+   transport: reject (`403`) unless the `Host` header's hostname is
+   `127.0.0.1`/`localhost`, and unless any present `Origin` header is also
+   loopback. This blocks a malicious web page from POSTing to
+   `localhost:4600/mcp` via the victim's browser — the exact rebinding threat
+   the MCP spec warns about — without relying on deprecated API.
 
 ## 4. Error handling
 
@@ -69,7 +74,7 @@ contract is the single API." A loopback self-request is microseconds.
 | Tool's loopback fetch fails | Existing `fail()` tool-result path (unchanged) |
 | GET/DELETE /mcp | `405` JSON, per stateless spec |
 | Malformed MCP body | Transport returns the MCP-standard JSON-RPC error |
-| Rebinding-protection reject | Transport `403` (bad Host/Origin) |
+| Non-loopback Host/Origin | Route `403` before transport handoff (§3.3) |
 | Transport error mid-request | Close transport + server; do not crash the process |
 
 ## 5. Testing
