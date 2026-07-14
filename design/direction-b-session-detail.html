@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>deblog — session detail · Direction B: Graphite Inspector</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --bg: #10131a;
+    --panel: #161a23;
+    --panel2: #1b2029;
+    --hair: #262c3a;
+    --txt: #cdd6e4;
+    --muted: #7d8799;
+    --faint: #4a5261;
+    --accent: #5b9dff;
+    --warn: #e5b567;
+    --err: #e5484d;
+    --ok: #46c98f;
+    --cyan: #38bdf8;
+    --violet: #a78bfa;
+    --ui: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--txt); font-family: var(--ui); font-size: 13px; }
+  .frame { width: 1440px; height: 900px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; }
+  kbd { border: 1px solid var(--hair); background: var(--panel2); border-radius: 4px; padding: 0 5px; font-size: 10.5px; color: var(--muted); font-family: var(--mono); }
+
+  /* ── top bar ────────────────────────────── */
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 11px 24px; border-bottom: 1px solid var(--hair); }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; }
+  .brand .mark { width: 18px; height: 18px; border-radius: 5px; background: linear-gradient(135deg, var(--accent), #3358cc); position: relative; }
+  .brand .mark::after { content: ''; position: absolute; left: 4px; right: 4px; top: 8px; height: 2px; background: #0c1017; border-radius: 1px; box-shadow: 0 -3px 0 #0c1017, 0 3px 0 #0c1017; }
+  .crumb { color: var(--faint); }
+  .crumb b { color: var(--txt); font-weight: 600; }
+  .crumb .id { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .kpis { margin-left: auto; display: flex; gap: 8px; }
+  .kpi { display: flex; align-items: baseline; gap: 6px; background: var(--panel); border: 1px solid var(--hair); border-radius: 7px; padding: 4px 11px; font-size: 12px; color: var(--muted); }
+  .kpi b { font-family: var(--mono); color: var(--txt); font-weight: 600; }
+  .kpi.err { border-color: rgba(229,72,77,.35); } .kpi.err b { color: #ff9b9b; }
+  .kpi.warn b { color: var(--warn); }
+  .livebtn { display: flex; align-items: center; gap: 7px; background: rgba(229,181,103,.1); border: 1px solid rgba(229,181,103,.35); color: var(--warn); border-radius: 7px; padding: 4px 12px; font-size: 12px; font-weight: 500; }
+
+  /* ── filter toolbar ─────────────────────── */
+  .toolbar { display: flex; align-items: center; gap: 10px; padding: 9px 24px; border-bottom: 1px solid var(--hair); background: var(--panel); }
+  .fchip { display: inline-flex; align-items: center; gap: 7px; background: var(--panel2); border: 1px solid var(--hair); border-radius: 6px; padding: 3px 10px; font-family: var(--mono); font-size: 11.5px; color: var(--txt); }
+  .fchip .cat { color: var(--faint); font-family: var(--ui); font-size: 11px; }
+  .fchip.err { border-color: rgba(229,72,77,.4); } .fchip.err b { color: #ff9b9b; font-weight: 500; }
+  .fchip.acc { border-color: rgba(91,157,255,.4); } .fchip.acc b { color: var(--accent); font-weight: 500; }
+  .fchip .x { color: var(--faint); cursor: pointer; }
+  .addf { color: var(--faint); font-size: 12px; border: 1px dashed var(--hair); border-radius: 6px; padding: 3px 10px; }
+  .toolbar .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .seg { display: inline-flex; border: 1px solid var(--hair); border-radius: 6px; overflow: hidden; background: var(--panel2); font-family: var(--mono); }
+  .seg span { padding: 3px 10px; font-size: 11px; color: var(--faint); border-right: 1px solid var(--hair); }
+  .seg span:last-child { border-right: 0; }
+  .seg span.on { background: #232a37; color: var(--txt); }
+  .share { color: var(--accent); font-size: 12px; }
+
+  /* ── timeline minimap: horizontal ───────── */
+  .timeline { position: relative; height: 44px; border-bottom: 1px solid var(--hair); background: var(--panel); padding: 6px 24px 4px; }
+  .tl-track { position: relative; height: 22px; border-radius: 4px; background: var(--panel2); border: 1px solid var(--hair); overflow: hidden; }
+  .tl-bar { position: absolute; bottom: 0; width: 1.6%; background: #33405a; border-radius: 1px 1px 0 0; }
+  .tl-err { position: absolute; top: 0; width: 2px; bottom: 0; background: var(--err); box-shadow: 0 0 6px rgba(229,72,77,.8); }
+  .tl-view { position: absolute; top: -1px; bottom: -1px; border: 1.5px solid var(--accent); border-radius: 4px; background: rgba(91,157,255,.07); cursor: grab; }
+  .tl-ticks { display: flex; justify-content: space-between; color: var(--faint); font-size: 9.5px; font-family: var(--mono); padding: 2px 2px 0; }
+
+  /* ── pinned strip ───────────────────────── */
+  .pinned { border-bottom: 1px solid var(--hair); background: linear-gradient(0deg, rgba(229,181,103,.03), rgba(229,181,103,.03)), var(--bg); }
+  .pinned .cap { padding: 5px 24px 1px; color: var(--warn); font-size: 10px; letter-spacing: .09em; font-weight: 600; }
+
+  /* ── log grid ───────────────────────────── */
+  .stream { flex: 1; overflow: hidden; font-family: var(--mono); font-size: 12px; }
+  .logrow {
+    display: grid; grid-template-columns: 3px 84px 82px 160px 64px 1fr 26px;
+    column-gap: 12px; align-items: baseline; padding: 4px 24px 4px 0; line-height: 17px;
+    border-bottom: 1px solid #151923;
+  }
+  .logrow:hover { background: #141824; }
+  .gut { align-self: stretch; }
+  .gut.webapp { background: var(--cyan); opacity: .7; }
+  .gut.api { background: var(--violet); opacity: .7; }
+  .ts { color: var(--faint); text-align: right; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  .srctag { font-size: 10.5px; align-self: center; justify-self: start; padding: 1px 8px; border-radius: 20px; }
+  .srctag.webapp { color: var(--cyan); background: rgba(56,189,248,.09); }
+  .srctag.api { color: var(--violet); background: rgba(167,139,250,.1); }
+  .ns { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lvl { font-size: 10px; font-weight: 600; letter-spacing: .06em; align-self: center; justify-self: start; padding: 1px 7px; border-radius: 4px; }
+  .lvl.debug { color: var(--faint); }
+  .lvl.info { color: var(--muted); background: rgba(125,135,153,.09); }
+  .lvl.warn { color: #0e0f13; background: var(--warn); }
+  .lvl.error { color: #fff; background: var(--err); }
+  .msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .logrow.is-debug .msg { color: var(--muted); }
+  .logrow.is-error { background: rgba(229,72,77,.05); }
+  .logrow.is-error .msg { color: #ffc2c0; }
+  .logrow.is-warn .msg { color: #f0dcb4; }
+  .logrow.selected { background: rgba(91,157,255,.08); box-shadow: inset 3px 0 0 var(--accent); }
+  .ctxprev { color: var(--faint); }
+  .trace { color: var(--accent); font-size: 10.5px; margin-left: 8px; opacity: .85; }
+  .trace::before { content: '⌁ '; }
+  .pinbtn { color: var(--faint); font-size: 12px; text-align: center; }
+  .pinbtn.on { color: var(--warn); }
+  .caret { color: var(--faint); margin-right: 4px; }
+
+  /* expanded ctx */
+  .ctxpanel {
+    grid-column: 2 / -1; margin: 4px 0 6px; padding: 10px 16px;
+    background: var(--panel2); border: 1px solid var(--hair); border-left: 3px solid var(--err); border-radius: 0 7px 7px 0;
+    font-size: 11.5px; line-height: 18px; white-space: pre; color: var(--muted);
+  }
+  .ctxpanel .k { color: var(--cyan); }
+  .ctxpanel .s { color: #9ece6a; }
+  .ctxpanel .n { color: var(--warn); }
+  .ctxpanel .actions { margin-top: 8px; display: flex; gap: 8px; font-family: var(--ui); font-size: 11px; }
+  .ctxpanel .actions span { border: 1px solid var(--hair); background: var(--panel); border-radius: 5px; padding: 2px 9px; color: var(--muted); }
+  .ctxpanel .actions .meta { border: 0; background: none; color: var(--faint); margin-left: auto; }
+
+  /* ── status bar ─────────────────────────── */
+  .statusbar { display: flex; gap: 16px; align-items: center; padding: 8px 24px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; background: var(--panel); }
+  .statusbar .paused { color: var(--warn); display: flex; gap: 6px; align-items: center; }
+  .statusbar .right { margin-left: auto; font-family: var(--mono); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="topbar">
+    <div class="brand"><span class="mark"></span>deblog</div>
+    <span class="crumb">sessions / <b>demo: checkout flow</b> <span class="id">mrk8msck-a9ajx</span></span>
+    <div class="kpis">
+      <span class="kpi"><b>105</b> events</span>
+      <span class="kpi err"><b>4</b> errors</span>
+      <span class="kpi warn"><b>3</b> warns</span>
+      <span class="kpi"><b>30s</b> · webapp+api</span>
+    </div>
+    <span class="livebtn">⏸ Tail paused · 2 new</span>
+  </div>
+
+  <div class="toolbar">
+    <span class="fchip acc"><span class="cat">ns</span><b>payment.*, cart:*</b><span class="x">×</span></span>
+    <span class="fchip err"><span class="cat">level</span><b>warn, error</b><span class="x">×</span></span>
+    <span class="fchip"><span class="cat">text</span>stripe<span class="x">×</span></span>
+    <span class="addf">+ filter</span>
+    <div class="right">
+      <span class="seg"><span>abs</span><span class="on">rel</span><span>Δ prev</span></span>
+      <span class="share">⧉ copy filter URL</span>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <div class="tl-track">
+      <div class="tl-bar" style="left:1%;  height:60%"></div><div class="tl-bar" style="left:3%;  height:90%"></div>
+      <div class="tl-bar" style="left:5%;  height:40%"></div><div class="tl-bar" style="left:7%;  height:30%"></div>
+      <div class="tl-bar" style="left:9%;  height:22%"></div><div class="tl-bar" style="left:12%; height:70%"></div>
+      <div class="tl-bar" style="left:14%; height:95%"></div><div class="tl-bar" style="left:16%; height:55%"></div>
+      <div class="tl-bar" style="left:19%; height:25%"></div><div class="tl-bar" style="left:23%; height:15%"></div>
+      <div class="tl-bar" style="left:27%; height:35%"></div><div class="tl-bar" style="left:31%; height:28%"></div>
+      <div class="tl-bar" style="left:35%; height:65%"></div><div class="tl-bar" style="left:37%; height:45%"></div>
+      <div class="tl-bar" style="left:41%; height:30%"></div><div class="tl-bar" style="left:48%; height:80%"></div>
+      <div class="tl-bar" style="left:52%; height:42%"></div><div class="tl-bar" style="left:58%; height:20%"></div>
+      <div class="tl-bar" style="left:64%; height:26%"></div><div class="tl-bar" style="left:70%; height:18%"></div>
+      <div class="tl-bar" style="left:76%; height:24%"></div><div class="tl-bar" style="left:82%; height:16%"></div>
+      <div class="tl-bar" style="left:88%; height:22%"></div><div class="tl-bar" style="left:94%; height:14%"></div>
+      <div class="tl-err" style="left:25.4%"></div>
+      <div class="tl-err" style="left:35.5%"></div>
+      <div class="tl-err" style="left:35.9%"></div>
+      <div class="tl-view" style="left:14%; width:31%"></div>
+    </div>
+    <div class="tl-ticks"><span>+0s</span><span>+7.5s</span><span>+15s</span><span>+22.5s</span><span>+30s</span></div>
+  </div>
+
+  <div class="pinned">
+    <div class="cap">PINNED</div>
+    <div class="stream">
+      <div class="logrow is-warn">
+        <span class="gut webapp"></span><span class="ts">+02.310</span>
+        <span class="srctag webapp">webapp</span><span class="ns">cart</span><span class="lvl warn">WARN</span>
+        <span class="msg">price changed since last view <span class="ctxprev">{sku:"SKU-771", old:2799, new:2999}</span></span>
+        <span class="pinbtn on">⌖</span>
+      </div>
+      <div class="logrow is-error">
+        <span class="gut api"></span><span class="ts">+07.632</span>
+        <span class="srctag api">api</span><span class="ns">payment.stripe</span><span class="lvl error">ERROR</span>
+        <span class="msg">upstream 502 from stripe <span class="ctxprev">{attempt:1, latency_ms:3021}</span><span class="trace">req-mrk8ms-pay</span></span>
+        <span class="pinbtn on">⌖</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stream">
+    <div class="logrow">
+      <span class="gut webapp"></span><span class="ts">+00.000</span>
+      <span class="srctag webapp">webapp</span><span class="ns">nav</span><span class="lvl info">INFO</span>
+      <span class="msg">page loaded <span class="ctxprev">{path:"/checkout"}</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow is-debug">
+      <span class="gut webapp"></span><span class="ts">+00.012</span>
+      <span class="srctag webapp">webapp</span><span class="ns">auth:token</span><span class="lvl debug">DEBUG</span>
+      <span class="msg">token found in storage <span class="ctxprev">{exp_in_s:3542}</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow">
+      <span class="gut api"></span><span class="ts">+00.214</span>
+      <span class="srctag api">api</span><span class="ns">http</span><span class="lvl info">INFO</span>
+      <span class="msg">GET /api/cart 200 <span class="ctxprev">{ms:12}</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow">
+      <span class="gut webapp"></span><span class="ts">+00.220</span>
+      <span class="srctag webapp">webapp</span><span class="ns">cart</span><span class="lvl info">INFO</span>
+      <span class="msg">cart hydrated <span class="ctxprev">{items:3, total_cents:8497}</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow is-debug">
+      <span class="gut api"></span><span class="ts">+00.891</span>
+      <span class="srctag api">api</span><span class="ns">db.pool</span><span class="lvl debug">DEBUG</span>
+      <span class="msg">connection checkout 17 <span class="ctxprev">{pool:"main", free:7}</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow is-warn">
+      <span class="gut webapp"></span><span class="ts">+02.310</span>
+      <span class="srctag webapp">webapp</span><span class="ns">cart</span><span class="lvl warn">WARN</span>
+      <span class="msg">price changed since last view <span class="ctxprev">{sku:"SKU-771", old:2799, new:2999}</span></span><span class="pinbtn on">⌖</span>
+    </div>
+    <div class="logrow">
+      <span class="gut api"></span><span class="ts">+04.556</span>
+      <span class="srctag api">api</span><span class="ns">http</span><span class="lvl info">INFO</span>
+      <span class="msg">POST /api/checkout 200 <span class="ctxprev">{ms:45}</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow">
+      <span class="gut api"></span><span class="ts">+04.601</span>
+      <span class="srctag api">api</span><span class="ns">payment.stripe</span><span class="lvl info">INFO</span>
+      <span class="msg">creating payment intent <span class="ctxprev">{amount_cents:8497}</span><span class="trace">req-mrk8ms-pay</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow">
+      <span class="gut webapp"></span><span class="ts">+04.610</span>
+      <span class="srctag webapp">webapp</span><span class="ns">cart:payment</span><span class="lvl info">INFO</span>
+      <span class="msg">submitting payment <span class="ctxprev">{provider:"stripe"}</span><span class="trace">req-mrk8ms-pay</span></span><span class="pinbtn">⌖</span>
+    </div>
+
+    <div class="logrow is-error selected">
+      <span class="gut api"></span><span class="ts">+07.632</span>
+      <span class="srctag api">api</span><span class="ns">payment.stripe</span><span class="lvl error">ERROR</span>
+      <span class="msg"><span class="caret">▾</span>upstream 502 from stripe<span class="trace">req-mrk8ms-pay</span></span>
+      <span class="pinbtn on">⌖</span>
+      <div class="ctxpanel">{
+  <span class="k">"attempt"</span>:     <span class="n">1</span>,
+  <span class="k">"latency_ms"</span>:  <span class="n">3021</span>,
+  <span class="k">"provider"</span>:    <span class="s">"stripe"</span>,
+  <span class="k">"intent"</span>:      <span class="s">"pi_3Nq8Yb2eZvKYlo2C"</span>,
+  <span class="k">"upstream"</span>:    { <span class="k">"status"</span>: <span class="n">502</span>, <span class="k">"body"</span>: <span class="s">"bad gateway"</span> }
+}<div class="actions"><span>Copy JSON</span><span>Filter this trace</span><span class="meta">seq 71 · received +07.633 · clock skew +1ms</span></div></div>
+    </div>
+
+    <div class="logrow is-error">
+      <span class="gut api"></span><span class="ts">+10.640</span>
+      <span class="srctag api">api</span><span class="ns">payment.stripe</span><span class="lvl error">ERROR</span>
+      <span class="msg">upstream 502 from stripe <span class="ctxprev">{attempt:2, latency_ms:3007}</span><span class="trace">req-mrk8ms-pay</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow is-error">
+      <span class="gut webapp"></span><span class="ts">+10.644</span>
+      <span class="srctag webapp">webapp</span><span class="ns">cart:payment</span><span class="lvl error">ERROR</span>
+      <span class="msg">payment request failed <span class="ctxprev">{status:502, attempt:2}</span><span class="trace">req-mrk8ms-pay</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow is-warn">
+      <span class="gut api"></span><span class="ts">+10.651</span>
+      <span class="srctag api">api</span><span class="ns">payment.queue</span><span class="lvl warn">WARN</span>
+      <span class="msg">payment enqueued for retry <span class="ctxprev">{queue_depth:1}</span><span class="trace">req-mrk8ms-pay</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow is-warn">
+      <span class="gut webapp"></span><span class="ts">+10.658</span>
+      <span class="srctag webapp">webapp</span><span class="ns">cart:payment</span><span class="lvl warn">WARN</span>
+      <span class="msg">falling back to retry queue<span class="trace">req-mrk8ms-pay</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow is-debug">
+      <span class="gut api"></span><span class="ts">+11.020</span>
+      <span class="srctag api">api</span><span class="ns">http</span><span class="lvl debug">DEBUG</span>
+      <span class="msg">GET /api/poll 200 <span class="ctxprev">{ms:3}</span></span><span class="pinbtn">⌖</span>
+    </div>
+    <div class="logrow is-debug">
+      <span class="gut api"></span><span class="ts">+11.980</span>
+      <span class="srctag api">api</span><span class="ns">http</span><span class="lvl debug">DEBUG</span>
+      <span class="msg">GET /api/poll 200 <span class="ctxprev">{ms:4}</span></span><span class="pinbtn">⌖</span>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span>Showing 16 of 105 · 3 filters</span>
+    <span class="paused">⏸ Live tail paused — <b>G</b> to resume</span>
+    <span class="right">seq cursor 84 · GET /events 2ms</span>
+  </div>
+</div>
+</body>
+</html>

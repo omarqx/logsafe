@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>deblog — session detail · Direction A: Phosphor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap');
+  :root {
+    --bg: #0a0d0b;
+    --bg-raise: #0e1210;
+    --txt: #b6c2b8;
+    --dim: #5d6b60;
+    --faint: #37423a;
+    --line: #1a221c;
+    --phos: #4af0a8;
+    --amber: #ffb454;
+    --err: #ff5c53;
+    --cyan: #5cc9f5;
+    --violet: #c792ea;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--txt); font-family: var(--mono); font-size: 12px; }
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.014) 0 1px, transparent 1px 3px);
+  }
+  .frame { width: 1440px; height: 900px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── header ─────────────────────────────── */
+  header { display: flex; align-items: baseline; gap: 12px; padding: 12px 20px 10px; border-bottom: 1px solid var(--line); }
+  .logo { color: var(--phos); font-weight: 700; }
+  .crumb { color: var(--faint); }
+  .crumb b { color: var(--txt); font-weight: 500; }
+  .counts { margin-left: auto; display: flex; gap: 14px; font-size: 11.5px; color: var(--dim); }
+  .counts .e { color: var(--err); font-weight: 700; }
+  .counts .w { color: var(--amber); }
+  .live { color: var(--amber); font-size: 11px; border: 1px solid rgba(255,180,84,.4); padding: 1px 8px; border-radius: 2px; }
+  .live::before { content: '⏸ '; }
+
+  /* ── command / filter line ──────────────── */
+  .cmdline { display: flex; align-items: center; gap: 8px; padding: 8px 20px; border-bottom: 1px solid var(--line); background: var(--bg-raise); }
+  .prompt { color: var(--phos); }
+  .chip { border: 1px solid var(--faint); border-radius: 2px; padding: 1px 7px; color: var(--dim); font-size: 11px; white-space: nowrap; }
+  .chip.on { border-color: var(--phos); color: var(--phos); }
+  .chip.on-err { border-color: var(--err); color: var(--err); }
+  .chip .x { color: var(--faint); margin-left: 4px; }
+  .freetext { color: var(--txt); }
+  .freetext::after { content: ''; display: inline-block; width: 6px; height: 11px; background: var(--phos); margin-left: 1px; animation: blink 1.1s steps(1) infinite; vertical-align: -1px; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .cmdline .right { margin-left: auto; display: flex; gap: 10px; align-items: center; color: var(--faint); font-size: 11px; white-space: nowrap; }
+  .tsmode { border: 1px solid var(--faint); border-radius: 2px; overflow: hidden; display: inline-flex; }
+  .tsmode span { padding: 1px 7px; color: var(--faint); }
+  .tsmode span.on { background: var(--faint); color: var(--bg); }
+  kbd { border: 1px solid var(--faint); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; font-size: 10px; color: var(--dim); font-family: inherit; }
+
+  /* ── pinned ─────────────────────────────── */
+  .pinned { border-bottom: 1px solid var(--line); background: #0f130d; }
+  .pinned .cap { padding: 3px 20px 0; color: var(--amber); font-size: 10px; letter-spacing: .1em; }
+  .pinned .logrow { opacity: .95; }
+
+  /* ── log stream ─────────────────────────── */
+  .stream-wrap { flex: 1; display: flex; overflow: hidden; }
+  .stream { flex: 1; overflow: hidden; padding-top: 2px; }
+  .logrow {
+    display: grid; grid-template-columns: 8px 74px 64px 150px 52px 1fr;
+    column-gap: 10px; align-items: baseline; padding: 2px 8px 2px 12px; line-height: 16px;
+  }
+  .logrow:hover { background: #10150f; }
+  .logrow .gut { align-self: stretch; border-radius: 1px; }
+  .gut.webapp { background: rgba(92,201,245,.55); }
+  .gut.api { background: rgba(199,146,234,.55); }
+  .ts { color: var(--faint); text-align: right; font-variant-numeric: tabular-nums; }
+  .src { font-size: 11px; }
+  .src.webapp { color: var(--cyan); }
+  .src.api { color: var(--violet); }
+  .ns { color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lvl { font-size: 10px; letter-spacing: .05em; }
+  .lvl.debug { color: var(--faint); }
+  .lvl.info { color: var(--dim); }
+  .lvl.warn { color: var(--amber); font-weight: 700; }
+  .lvl.error { color: var(--err); font-weight: 700; }
+  .msg { color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .logrow.is-debug .msg { color: var(--dim); }
+  .logrow.is-warn .msg { color: #e8d5b0; }
+  .logrow.is-error { background: rgba(255,92,83,.06); }
+  .logrow.is-error .msg { color: #ffb3ad; }
+  .logrow.selected { background: #121a12; box-shadow: inset 2px 0 0 var(--phos); }
+  .ctxprev { color: var(--faint); }
+  .trace { color: var(--phos); opacity: .75; font-size: 10.5px; margin-left: 8px; }
+  .trace::before { content: '⌁'; margin-right: 2px; }
+  .pin { color: var(--amber); margin-right: 4px; }
+
+  /* expanded ctx */
+  .ctxpanel {
+    grid-column: 1 / -1; margin: 2px 0 4px 84px; padding: 8px 14px;
+    border-left: 2px solid var(--err); background: #0e0c0a;
+    font-size: 11.5px; line-height: 17px; white-space: pre; color: var(--dim);
+  }
+  .ctxpanel .k { color: var(--violet); }
+  .ctxpanel .s { color: var(--phos); }
+  .ctxpanel .n { color: var(--amber); }
+  .ctxpanel .actions { margin-top: 6px; color: var(--faint); font-size: 10.5px; }
+  .ctxpanel .actions span { border: 1px solid var(--faint); border-radius: 2px; padding: 0 6px; margin-right: 6px; }
+
+  /* ── minimap: vertical right edge ───────── */
+  .minimap {
+    width: 30px; border-left: 1px solid var(--line); position: relative; background: var(--bg-raise);
+    flex: none;
+  }
+  .minimap .cap { position: absolute; top: 4px; left: 0; right: 0; text-align: center; color: var(--faint); font-size: 8px; letter-spacing: .1em; }
+  .mm-density { position: absolute; left: 7px; right: 13px; top: 18px; bottom: 18px; }
+  .mm-density i { position: absolute; left: 0; right: 0; background: #24301f; border-radius: 1px; }
+  .mm-err { position: absolute; right: 6px; width: 4px; background: var(--err); border-radius: 1px; box-shadow: 0 0 5px rgba(255,92,83,.8); }
+  .mm-view { position: absolute; left: 2px; right: 2px; border: 1px solid rgba(74,240,168,.5); border-radius: 2px; background: rgba(74,240,168,.05); }
+
+  /* ── footer ─────────────────────────────── */
+  footer { display: flex; gap: 16px; padding: 7px 20px; border-top: 1px solid var(--line); color: var(--faint); font-size: 11px; background: var(--bg-raise); }
+  footer .right { margin-left: auto; }
+  footer .paused { color: var(--amber); }
+</style>
+</head>
+<body>
+<div class="frame">
+  <header>
+    <span class="logo">deblog</span>
+    <span class="crumb">sessions / <b>demo: checkout flow</b> · mrk8msck-a9ajx</span>
+    <div class="counts">
+      <span>105 events</span><span class="e">4 errors</span><span class="w">3 warns</span><span>webapp + api · 30s</span>
+    </div>
+    <span class="live">tail paused — 2 new</span>
+  </header>
+
+  <div class="cmdline">
+    <span class="prompt">❯</span>
+    <span class="chip on">ns:payment.*,cart:* <span class="x">×</span></span>
+    <span class="chip on-err">level:warn,error <span class="x">×</span></span>
+    <span class="chip">trace:req-mrk8ms-pay</span>
+    <span class="freetext">stripe</span>
+    <span class="right">
+      <span class="tsmode"><span>abs</span><span class="on">rel</span><span>Δ</span></span>
+      <kbd>/</kbd> search <kbd>f</kbd> filter <kbd>e</kbd> errors <kbd>p</kbd> pin <kbd>t</kbd> time
+    </span>
+  </div>
+
+  <div class="pinned">
+    <div class="cap">PINNED · 2</div>
+    <div class="logrow is-warn">
+      <span class="gut webapp"></span><span class="ts">+02.310</span>
+      <span class="src webapp">webapp</span><span class="ns">cart</span><span class="lvl warn">WARN</span>
+      <span class="msg"><span class="pin">⌖</span>price changed since last view <span class="ctxprev">{sku:"SKU-771", old:2799, new:2999}</span></span>
+    </div>
+    <div class="logrow is-error">
+      <span class="gut api"></span><span class="ts">+07.632</span>
+      <span class="src api">api</span><span class="ns">payment.stripe</span><span class="lvl error">ERROR</span>
+      <span class="msg"><span class="pin">⌖</span>upstream 502 from stripe <span class="ctxprev">{attempt:1, latency_ms:3021}</span><span class="trace">req-mrk8ms-pay</span></span>
+    </div>
+  </div>
+
+  <div class="stream-wrap">
+    <div class="stream">
+      <div class="logrow">
+        <span class="gut webapp"></span><span class="ts">+00.000</span>
+        <span class="src webapp">webapp</span><span class="ns">nav</span><span class="lvl info">info</span>
+        <span class="msg">page loaded <span class="ctxprev">{path:"/checkout"}</span></span>
+      </div>
+      <div class="logrow is-debug">
+        <span class="gut webapp"></span><span class="ts">+00.012</span>
+        <span class="src webapp">webapp</span><span class="ns">auth:token</span><span class="lvl debug">debug</span>
+        <span class="msg">token found in storage <span class="ctxprev">{exp_in_s:3542}</span></span>
+      </div>
+      <div class="logrow is-debug">
+        <span class="gut webapp"></span><span class="ts">+00.014</span>
+        <span class="src webapp">webapp</span><span class="ns">auth:token</span><span class="lvl debug">debug</span>
+        <span class="msg">token validated</span>
+      </div>
+      <div class="logrow is-debug">
+        <span class="gut webapp"></span><span class="ts">+00.019</span>
+        <span class="src webapp">webapp</span><span class="ns">nav</span><span class="lvl debug">debug</span>
+        <span class="msg">route probe 4 <span class="ctxprev">{idx:4}</span></span>
+      </div>
+      <div class="logrow">
+        <span class="gut api"></span><span class="ts">+00.214</span>
+        <span class="src api">api</span><span class="ns">http</span><span class="lvl info">info</span>
+        <span class="msg">GET /api/cart 200 <span class="ctxprev">{ms:12}</span></span>
+      </div>
+      <div class="logrow">
+        <span class="gut webapp"></span><span class="ts">+00.220</span>
+        <span class="src webapp">webapp</span><span class="ns">cart</span><span class="lvl info">info</span>
+        <span class="msg">cart hydrated <span class="ctxprev">{items:3, total_cents:8497}</span></span>
+      </div>
+      <div class="logrow is-debug">
+        <span class="gut api"></span><span class="ts">+00.891</span>
+        <span class="src api">api</span><span class="ns">db.pool</span><span class="lvl debug">debug</span>
+        <span class="msg">connection checkout 17 <span class="ctxprev">{pool:"main", free:7}</span></span>
+      </div>
+      <div class="logrow is-debug">
+        <span class="gut api"></span><span class="ts">+01.011</span>
+        <span class="src api">api</span><span class="ns">db.pool</span><span class="lvl debug">debug</span>
+        <span class="msg">connection checkout 18 <span class="ctxprev">{pool:"main", free:6}</span></span>
+      </div>
+      <div class="logrow is-warn">
+        <span class="gut webapp"></span><span class="ts">+02.310</span>
+        <span class="src webapp">webapp</span><span class="ns">cart</span><span class="lvl warn">WARN</span>
+        <span class="msg">price changed since last view <span class="ctxprev">{sku:"SKU-771", old:2799, new:2999}</span></span>
+      </div>
+      <div class="logrow">
+        <span class="gut api"></span><span class="ts">+04.556</span>
+        <span class="src api">api</span><span class="ns">http</span><span class="lvl info">info</span>
+        <span class="msg">POST /api/checkout 200 <span class="ctxprev">{ms:45}</span></span>
+      </div>
+      <div class="logrow">
+        <span class="gut api"></span><span class="ts">+04.601</span>
+        <span class="src api">api</span><span class="ns">payment.stripe</span><span class="lvl info">info</span>
+        <span class="msg">creating payment intent <span class="ctxprev">{amount_cents:8497}</span><span class="trace">req-mrk8ms-pay</span></span>
+      </div>
+      <div class="logrow">
+        <span class="gut webapp"></span><span class="ts">+04.610</span>
+        <span class="src webapp">webapp</span><span class="ns">cart:payment</span><span class="lvl info">info</span>
+        <span class="msg">submitting payment <span class="ctxprev">{provider:"stripe"}</span><span class="trace">req-mrk8ms-pay</span></span>
+      </div>
+
+      <div class="logrow is-error selected">
+        <span class="gut api"></span><span class="ts">+07.632</span>
+        <span class="src api">api</span><span class="ns">payment.stripe</span><span class="lvl error">ERROR</span>
+        <span class="msg">▾ upstream 502 from stripe<span class="trace">req-mrk8ms-pay</span></span>
+        <div class="ctxpanel">{
+  <span class="k">"attempt"</span>:     <span class="n">1</span>,
+  <span class="k">"latency_ms"</span>:  <span class="n">3021</span>,
+  <span class="k">"provider"</span>:    <span class="s">"stripe"</span>,
+  <span class="k">"intent"</span>:      <span class="s">"pi_3Nq8Yb2eZvKYlo2C"</span>,
+  <span class="k">"upstream"</span>:    { <span class="k">"status"</span>: <span class="n">502</span>, <span class="k">"body"</span>: <span class="s">"bad gateway"</span> }
+}<div class="actions"><span>copy json</span><span>filter trace</span><span>seq 71 · recv +07.633</span></div></div>
+      </div>
+
+      <div class="logrow is-error">
+        <span class="gut api"></span><span class="ts">+10.640</span>
+        <span class="src api">api</span><span class="ns">payment.stripe</span><span class="lvl error">ERROR</span>
+        <span class="msg">upstream 502 from stripe <span class="ctxprev">{attempt:2, latency_ms:3007}</span><span class="trace">req-mrk8ms-pay</span></span>
+      </div>
+      <div class="logrow is-error">
+        <span class="gut webapp"></span><span class="ts">+10.644</span>
+        <span class="src webapp">webapp</span><span class="ns">cart:payment</span><span class="lvl error">ERROR</span>
+        <span class="msg">payment request failed <span class="ctxprev">{status:502, attempt:2}</span><span class="trace">req-mrk8ms-pay</span></span>
+      </div>
+      <div class="logrow is-warn">
+        <span class="gut api"></span><span class="ts">+10.651</span>
+        <span class="src api">api</span><span class="ns">payment.queue</span><span class="lvl warn">WARN</span>
+        <span class="msg">payment enqueued for retry <span class="ctxprev">{queue_depth:1}</span><span class="trace">req-mrk8ms-pay</span></span>
+      </div>
+      <div class="logrow is-warn">
+        <span class="gut webapp"></span><span class="ts">+10.658</span>
+        <span class="src webapp">webapp</span><span class="ns">cart:payment</span><span class="lvl warn">WARN</span>
+        <span class="msg">falling back to retry queue<span class="trace">req-mrk8ms-pay</span></span>
+      </div>
+      <div class="logrow is-debug">
+        <span class="gut api"></span><span class="ts">+11.020</span>
+        <span class="src api">api</span><span class="ns">http</span><span class="lvl debug">debug</span>
+        <span class="msg">GET /api/poll 200 <span class="ctxprev">{ms:3}</span></span>
+      </div>
+      <div class="logrow is-debug">
+        <span class="gut api"></span><span class="ts">+11.980</span>
+        <span class="src api">api</span><span class="ns">http</span><span class="lvl debug">debug</span>
+        <span class="msg">GET /api/poll 200 <span class="ctxprev">{ms:4}</span></span>
+      </div>
+      <div class="logrow is-debug">
+        <span class="gut api"></span><span class="ts">+12.940</span>
+        <span class="src api">api</span><span class="ns">http</span><span class="lvl debug">debug</span>
+        <span class="msg">GET /api/poll 200 <span class="ctxprev">{ms:5}</span></span>
+      </div>
+    </div>
+
+    <div class="minimap">
+      <div class="cap">MAP</div>
+      <div class="mm-density">
+        <i style="top:0%;   height:6%; opacity:.9"></i>
+        <i style="top:7%;  height:3%; opacity:.5"></i>
+        <i style="top:12%; height:9%; opacity:.7"></i>
+        <i style="top:24%; height:4%; opacity:.4"></i>
+        <i style="top:31%; height:12%; opacity:1"></i>
+        <i style="top:46%; height:5%; opacity:.55"></i>
+        <i style="top:54%; height:8%; opacity:.8"></i>
+        <i style="top:65%; height:3%; opacity:.35"></i>
+        <i style="top:71%; height:10%; opacity:.6"></i>
+        <i style="top:84%; height:12%; opacity:.5"></i>
+      </div>
+      <div class="mm-err" style="top:36%; height:1.4%"></div>
+      <div class="mm-err" style="top:52%; height:2.6%"></div>
+      <div class="mm-view" style="top:30%; height:34%"></div>
+    </div>
+  </div>
+
+  <footer>
+    <span>showing 20 of 105 · filtered by 3 chips</span>
+    <span class="paused">⏸ live tail paused — scroll to bottom or press <b>G</b> to resume</span>
+    <span class="right">seq cursor 84 · GET /events 2ms</span>
+  </footer>
+</div>
+</body>
+</html>

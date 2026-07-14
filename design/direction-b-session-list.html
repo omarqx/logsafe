@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>deblog — sessions · Direction B: Graphite Inspector</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --bg: #10131a;
+    --panel: #161a23;
+    --panel2: #1b2029;
+    --hair: #262c3a;
+    --txt: #cdd6e4;
+    --muted: #7d8799;
+    --faint: #4a5261;
+    --accent: #5b9dff;
+    --warn: #e5b567;
+    --err: #e5484d;
+    --ok: #46c98f;
+    --cyan: #38bdf8;   /* source: webapp */
+    --violet: #a78bfa; /* source: api */
+    --slate: #94a3b8;  /* source: worker */
+    --ui: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--txt); font-family: var(--ui); font-size: 13px; }
+  .frame { width: 1440px; height: 900px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden;
+    background:
+      radial-gradient(1100px 500px at 80% -10%, rgba(91,157,255,.05), transparent 60%),
+      var(--bg);
+  }
+
+  /* ── top bar ────────────────────────────── */
+  .topbar { display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--hair); }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: .01em; }
+  .brand .mark { width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(135deg, var(--accent), #3358cc); position: relative; }
+  .brand .mark::after { content: ''; position: absolute; left: 4px; right: 4px; top: 9px; height: 2px; background: #0c1017; border-radius: 1px; box-shadow: 0 -3.5px 0 #0c1017, 0 3.5px 0 #0c1017; }
+  .search {
+    flex: 1; max-width: 460px; display: flex; align-items: center; gap: 8px;
+    background: var(--panel); border: 1px solid var(--hair); border-radius: 7px; padding: 6px 12px; color: var(--faint);
+  }
+  .search kbd { margin-left: auto; }
+  kbd { border: 1px solid var(--hair); background: var(--panel2); border-radius: 4px; padding: 0 5px; font-size: 10.5px; color: var(--muted); font-family: var(--mono); }
+  .topbar .stat { color: var(--muted); font-size: 12px; }
+  .topbar .stat b { color: var(--txt); font-weight: 600; }
+  .topbar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+  .conn { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .conn i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px rgba(70,201,143,.8); }
+
+  /* ── toolbar: segmented filters ─────────── */
+  .toolbar { display: flex; align-items: center; gap: 12px; padding: 11px 24px; border-bottom: 1px solid var(--hair); }
+  .seg { display: inline-flex; border: 1px solid var(--hair); border-radius: 7px; overflow: hidden; background: var(--panel); }
+  .seg span { padding: 4px 13px; font-size: 12px; color: var(--muted); border-right: 1px solid var(--hair); cursor: pointer; }
+  .seg span:last-child { border-right: 0; }
+  .seg span.on { background: var(--panel2); color: var(--txt); font-weight: 500; box-shadow: inset 0 -2px 0 var(--accent); }
+  .toolbar .label { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
+  .toolbar .right { margin-left: auto; color: var(--faint); font-size: 12px; }
+
+  /* ── table ──────────────────────────────── */
+  .table { flex: 1; overflow: hidden; padding: 14px 24px 0; }
+  .thead {
+    display: grid; grid-template-columns: 34px 1.6fr 190px 130px 110px 110px 110px 90px;
+    padding: 0 14px 8px; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+  }
+  .thead .r { text-align: right; }
+  .card {
+    display: grid; grid-template-columns: 34px 1.6fr 190px 130px 110px 110px 110px 90px;
+    align-items: center; padding: 11px 14px; margin-bottom: 6px;
+    background: var(--panel); border: 1px solid var(--hair); border-radius: 9px;
+    cursor: pointer; transition: border-color .12s, transform .12s;
+  }
+  .card:hover { border-color: #33405a; }
+  .card.selected { border-color: var(--accent); background: linear-gradient(0deg, rgba(91,157,255,.05), rgba(91,157,255,.05)), var(--panel); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .dot.active { background: var(--ok); box-shadow: 0 0 0 3px rgba(70,201,143,.15), 0 0 8px rgba(70,201,143,.7); animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .5; } }
+  .dot.idle { background: var(--faint); }
+  .name { min-width: 0; }
+  .name .l { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .name .l.scratch { color: var(--muted); font-style: italic; font-weight: 400; }
+  .name .id { color: var(--faint); font-size: 11px; font-family: var(--mono); }
+  .srcs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { font-size: 11px; font-family: var(--mono); padding: 1.5px 8px; border-radius: 20px; }
+  .pill.webapp { color: var(--cyan); background: rgba(56,189,248,.1); }
+  .pill.api { color: var(--violet); background: rgba(167,139,250,.12); }
+  .pill.worker { color: var(--slate); background: rgba(148,163,184,.12); }
+  .pill.default { color: var(--muted); background: rgba(125,135,153,.1); }
+  .when { color: var(--muted); font-size: 12px; }
+  .when b { color: var(--txt); font-weight: 500; font-family: var(--mono); }
+  .num { text-align: right; font-family: var(--mono); font-size: 12.5px; color: var(--txt); font-variant-numeric: tabular-nums; }
+  .num small { color: var(--faint); }
+  .badge { justify-self: end; font-family: var(--mono); font-size: 11.5px; padding: 2px 9px; border-radius: 5px; font-weight: 600; }
+  .badge.err { color: #ff9b9b; background: rgba(229,72,77,.14); border: 1px solid rgba(229,72,77,.3); }
+  .badge.zero { color: var(--faint); background: transparent; border: 1px solid var(--hair); font-weight: 400; }
+  .warnnum { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--warn); font-variant-numeric: tabular-nums; }
+  .warnnum.zero { color: var(--faint); }
+  .dur { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ── status bar ─────────────────────────── */
+  .statusbar {
+    display: flex; gap: 18px; align-items: center; padding: 9px 24px; border-top: 1px solid var(--hair);
+    color: var(--faint); font-size: 12px; background: var(--panel);
+  }
+  .statusbar .right { margin-left: auto; font-family: var(--mono); font-size: 11px; }
+  .statusbar .keys { display: flex; gap: 8px; align-items: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="topbar">
+    <div class="brand"><span class="mark"></span>deblog</div>
+    <div class="search">Search sessions… <kbd>/</kbd></div>
+    <span class="stat"><b>7</b> sessions · <b>118,712</b> events</span>
+    <div class="right">
+      <span class="conn"><i></i>127.0.0.1:4600</span>
+      <span class="stat">retention <b>7d</b></span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <span class="label">Show</span>
+    <div class="seg"><span class="on">All</span><span>Active</span><span>With errors</span></div>
+    <span class="label">Source</span>
+    <div class="seg"><span class="on">Any</span><span>webapp</span><span>api</span><span>worker</span></div>
+    <span class="right">sorted by last activity</span>
+  </div>
+
+  <div class="table">
+    <div class="thead">
+      <span></span><span>Session</span><span>Sources</span><span>Started</span>
+      <span class="r">Events</span><span class="r">Errors</span><span class="r">Warns</span><span class="r">Duration</span>
+    </div>
+
+    <div class="card">
+      <span class="dot active"></span>
+      <div class="name"><div class="l">qalm import run #12</div><div class="id">mrk9dt2a-ke01x</div></div>
+      <div class="srcs"><span class="pill worker">worker</span><span class="pill api">api</span></div>
+      <span class="when"><b>22:58</b> today</span>
+      <span class="num">12,406</span>
+      <span class="badge zero">0</span>
+      <span class="warnnum">3</span>
+      <span class="dur">4m 32s</span>
+    </div>
+
+    <div class="card selected">
+      <span class="dot idle"></span>
+      <div class="name"><div class="l">demo: checkout flow</div><div class="id">mrk8msck-a9ajx</div></div>
+      <div class="srcs"><span class="pill webapp">webapp</span><span class="pill api">api</span></div>
+      <span class="when"><b>22:47</b> today</span>
+      <span class="num">105</span>
+      <span class="badge err">4 ⚠</span>
+      <span class="warnnum">3</span>
+      <span class="dur">30s</span>
+    </div>
+
+    <div class="card">
+      <span class="dot idle"></span>
+      <div class="name"><div class="l">auth flow — token refresh</div><div class="id">mrk6b0qh-77dnm</div></div>
+      <div class="srcs"><span class="pill webapp">webapp</span></div>
+      <span class="when"><b>21:15</b> today</span>
+      <span class="num">1,204</span>
+      <span class="badge err">12 ⚠</span>
+      <span class="warnnum">40</span>
+      <span class="dur">2m 04s</span>
+    </div>
+
+    <div class="card">
+      <span class="dot idle"></span>
+      <div class="name"><div class="l scratch">scratch-2026-07-13</div><div class="id">unlabeled curl traffic</div></div>
+      <div class="srcs"><span class="pill default">default</span></div>
+      <span class="when"><b>18:03</b> today</span>
+      <span class="num">41</span>
+      <span class="badge zero">0</span>
+      <span class="warnnum zero">0</span>
+      <span class="dur">6h 12m</span>
+    </div>
+
+    <div class="card">
+      <span class="dot idle"></span>
+      <div class="name"><div class="l">player buffer repro</div><div class="id">mrjw01sd-p2c88</div></div>
+      <div class="srcs"><span class="pill webapp">webapp</span><span class="pill api">api</span><span class="pill worker">worker</span></div>
+      <span class="when"><b>16:40</b> yesterday</span>
+      <span class="num">96,882</span>
+      <span class="badge err">217 ⚠</span>
+      <span class="warnnum">1,432</span>
+      <span class="dur">18m 51s</span>
+    </div>
+
+    <div class="card">
+      <span class="dot idle"></span>
+      <div class="name"><div class="l">migration dry-run 0007</div><div class="id">mrjr5nnz-w3hh1</div></div>
+      <div class="srcs"><span class="pill worker">worker</span></div>
+      <span class="when"><b>11:32</b> yesterday</span>
+      <span class="num">8,067</span>
+      <span class="badge zero">0</span>
+      <span class="warnnum zero">0</span>
+      <span class="dur">58s</span>
+    </div>
+
+    <div class="card">
+      <span class="dot idle"></span>
+      <div class="name"><div class="l scratch">scratch-2026-07-11</div><div class="id">unlabeled curl traffic</div></div>
+      <div class="srcs"><span class="pill default">default</span></div>
+      <span class="when"><b>09:12</b> Jul 11</span>
+      <span class="num">7</span>
+      <span class="badge zero">0</span>
+      <span class="warnnum zero">0</span>
+      <span class="dur">2s</span>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span class="keys"><kbd>j</kbd><kbd>k</kbd> move <kbd>↵</kbd> open <kbd>x</kbd> delete session</span>
+    <span class="right">deblog v0.1.0 · GET /api/sessions 3ms</span>
+  </div>
+</div>
+</body>
+</html>
