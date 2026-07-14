@@ -169,6 +169,35 @@ path to finding and reading its logs. Full field/param reference is in
   replays history then streams new events as they arrive — useful for
   watching a session while reproducing a bug interactively.
 
+### Hooking up an AI agent
+
+**MCP (Cursor, Claude Code, any MCP client)** — logsafe ships an MCP server:
+
+```jsonc
+// Cursor: ~/.cursor/mcp.json
+{ "mcpServers": { "logsafe": { "command": "npx", "args": ["logsafe", "mcp"] } } }
+```
+
+```bash
+# Claude Code:
+claude mcp add logsafe -- npx logsafe mcp
+```
+
+Tools: `list_sessions`, `get_session`, `query_events`, `tail_session` —
+read-only, talking to your local server (override with `--url` or `LOGSAFE_URL`).
+
+**Skill (Claude Code)** — a debugging workflow skill ships in this repo/package:
+
+```bash
+# installed via npm:
+cp -r node_modules/logsafe/skills/debugging-with-logsafe ~/.claude/skills/
+
+# from source (this repo):
+cp -r packages/server/skills/debugging-with-logsafe ~/.claude/skills/
+```
+
+(For Cursor, paste the SKILL.md body into a project rule instead.)
+
 ## Configuration
 
 Environment variables, read at server startup (`npm start`):
