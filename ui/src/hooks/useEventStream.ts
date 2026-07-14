@@ -1,5 +1,5 @@
-// Progressive page-load + filtered SSE live tail + pins, per docs/superpowers
-// plans/2026-07-13-logsafe-phase4-ui.md (Task 4). Filters are applied
+// Progressive page-load + filtered SSE live tail + pins, per the Phase 4 UI plan
+// in docs/superpowers/plans/ (Task 4). Filters are applied
 // server-side for the initial page load (apiParams goes straight to
 // fetchEventsPage) and client-side for the SSE tail (the /stream endpoint
 // has no filter params — see API.md — so every event is re-tested locally
