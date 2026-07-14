@@ -145,9 +145,11 @@ function rowToSession(row: SessionRow, now: number): SessionSummary {
 }
 
 export function listSessions(db: Db, limit: number, offset: number, now: number): SessionSummary[] {
+  const safeLimit = Math.min(Math.max(1, limit), 1000)
+  const safeOffset = Math.max(0, offset)
   const rows = db
     .prepare('SELECT * FROM sessions ORDER BY last_ts DESC LIMIT ? OFFSET ?')
-    .all(limit, offset) as SessionRow[]
+    .all(safeLimit, safeOffset) as SessionRow[]
   return rows.map((r) => rowToSession(r, now))
 }
 

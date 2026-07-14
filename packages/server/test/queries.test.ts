@@ -107,4 +107,11 @@ describe('sessions', () => {
     expect(c.c).toBe(0)
     expect(deleteSession(db, 's1')).toBe(false)
   })
+
+  it('listSessions clamps hostile limit/offset (negative limit is not unlimited)', () => {
+    insertBatch(db, [normalizeEvent({ msg: 'x', session_id: 's2', ts: NOW }, NOW)!])
+    // fixture has s1 + s2; a negative limit must not return everything
+    expect(listSessions(db, -1, 0, NOW)).toHaveLength(1)
+    expect(listSessions(db, 50, -5, NOW)).toHaveLength(2)
+  })
 })
