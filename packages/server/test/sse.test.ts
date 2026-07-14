@@ -61,6 +61,46 @@ describe('GET /api/sessions/:id/stream', () => {
     expect(events.map((e) => e.seq)).toEqual([2, 3])
   })
 
+  it('does not drop backlog frames when a live event arrives mid-replay under backpressure', async () => {
+    app = buildApp({ db: openDb(':memory:') })
+    const base = `http://127.0.0.1:${await listen(app)}`
+
+    // A bulky ctx defeats the socket write buffer so the replay loop is
+    // forced to suspend on 'drain' partway through the backlog.
+    const bulk = 'x'.repeat(16_384)
+    const backlog = Array.from({ length: 200 }, (_, i) => ({
+      msg: `bulk-${i}`,
+      session_id: 's1',
+      ctx: { bulk },
+    }))
+    await fetch(`${base}/v1/log`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(backlog),
+    })
+
+    // Open the stream but don't read from it yet, so the server races ahead
+    // writing the backlog and hits backpressure while nobody is draining
+    // the socket on the client side.
+    const res = await fetch(`${base}/api/sessions/s1/stream`)
+
+    // Publish a live event while the replay loop is (likely) suspended on
+    // 'drain'. Before the buffer-then-flush fix, the hub callback wrote this
+    // immediately, advancing lastSeq past the entire un-replayed backlog and
+    // causing every remaining backlog event to fail the seq guard silently.
+    await fetch(`${base}/v1/log`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ msg: 'live-1', session_id: 's1' }),
+    })
+
+    // 200 backlog events + 1 live event. Test has a 15s bounded timeout
+    // (below) so a regression that drops frames fails explicitly instead of
+    // hanging forever waiting for a count that will never arrive.
+    const events = await readEvents(res, 201)
+    expect(events.map((e) => e.seq)).toEqual(Array.from({ length: 201 }, (_, i) => i + 1))
+  }, 15_000)
+
   it('does not deliver events from other sessions', async () => {
     app = buildApp({ db: openDb(':memory:') })
     const base = `http://127.0.0.1:${await listen(app)}`

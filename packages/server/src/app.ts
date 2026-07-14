@@ -118,13 +118,24 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
       'content-type': 'application/x-ndjson; charset=utf-8',
       'access-control-allow-origin': '*',
     })
+    // A drain wait can suspend indefinitely; if the client disconnects while
+    // suspended, the socket gets neither 'drain' nor 'error', stranding this
+    // handler (and the up-to-5000-event page it's holding) forever. Abort
+    // the wait on disconnect instead.
+    const closed = new AbortController()
+    req.raw.on('close', () => closed.abort())
     let after = filters.after_seq
     for (;;) {
       if (reply.raw.destroyed) break
       const { events, next_after_seq } = queryEvents(db, id, { ...filters, after_seq: after, limit: 5000 })
       for (const ev of events) {
+        if (reply.raw.destroyed) break
         if (!reply.raw.write(JSON.stringify(ev) + '\n') && !reply.raw.destroyed) {
-          await once(reply.raw, 'drain')
+          try {
+            await once(reply.raw, 'drain', { signal: closed.signal })
+          } catch {
+            break // client gone mid-wait; outer loop's destroyed check stops pagination
+          }
         }
       }
       if (next_after_seq === null) break
@@ -161,25 +172,38 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     // disconnected by its own reading pace. Only the replay loop below
     // awaits drain, since it can synchronously push an unbounded backlog.
     let lastSeq = afterSeq
+    let replaying = true
+    const pending: StoredEvent[] = []
     const write = (ev: StoredEvent): boolean => {
       if (ev.seq <= lastSeq) return true
       lastSeq = ev.seq
       return reply.raw.write(`event: log\ndata: ${JSON.stringify(ev)}\n\n`)
     }
 
-    // Subscribe before replay; ingest and replay interleave with the (now
-    // async) replay loop below, but the seq guard in write() makes any
-    // overlap harmless — events are only ever forwarded once, in order.
+    // While replay is paginating (and possibly suspended on 'drain'),
+    // live events are buffered; writing them immediately would advance
+    // lastSeq past the un-replayed backlog and silently drop it. Once
+    // replay finishes, the buffer is flushed synchronously (below) and the
+    // seq guard in write() dedupes anything replay already sent, so every
+    // event is delivered exactly once regardless of how replay and live
+    // publishes interleave.
     const unsubscribe = hub.subscribe(id, (events) => {
+      if (replaying) {
+        pending.push(...events)
+        return
+      }
       for (const ev of events) write(ev)
     })
 
     // Wire up cleanup before the replay loop (not after): the loop can now
     // await 'drain', so the client may disconnect mid-replay. Registering
     // the close handler first ensures the hub subscription and heartbeat
-    // are always torn down instead of leaking on an early disconnect.
+    // are always torn down instead of leaking on an early disconnect, and
+    // aborts any in-flight drain wait so it can't strand this handler.
+    const closed = new AbortController()
     const hb = setInterval(() => reply.raw.write(': hb\n\n'), 15_000)
     req.raw.on('close', () => {
+      closed.abort()
       clearInterval(hb)
       unsubscribe()
     })
@@ -189,11 +213,25 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
       if (reply.raw.destroyed) break
       const { events, next_after_seq } = queryEvents(db, id, { after_seq: after, limit: 5000 })
       for (const ev of events) {
-        if (!write(ev) && !reply.raw.destroyed) await once(reply.raw, 'drain')
+        if (reply.raw.destroyed) break
+        if (!write(ev) && !reply.raw.destroyed) {
+          try {
+            await once(reply.raw, 'drain', { signal: closed.signal })
+          } catch {
+            break // client gone mid-wait; outer loop's destroyed check stops pagination
+          }
+        }
       }
       if (next_after_seq === null) break
       after = next_after_seq
     }
+
+    // Replay is done (or the client is gone). Flip the flag and flush
+    // whatever live events queued up while replay was running, in the same
+    // synchronous stretch so no hub callback can interleave and re-buffer.
+    replaying = false
+    for (const ev of pending) write(ev) // seq guard dedupes anything replay already sent
+    pending.length = 0
   })
 
   return app
