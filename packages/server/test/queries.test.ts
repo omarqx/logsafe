@@ -74,6 +74,11 @@ describe('queryEvents', () => {
   it('unknown session returns empty', () => {
     expect(queryEvents(db, 'nope', {}).events).toEqual([])
   })
+
+  it('fractional limit is truncated, not a datatype error', () => {
+    expect(() => queryEvents(db, 's1', { limit: 2.5 })).not.toThrow()
+    expect(queryEvents(db, 's1', { limit: 2.5 }).events).toHaveLength(2)
+  })
 })
 
 describe('sessions', () => {
@@ -113,5 +118,7 @@ describe('sessions', () => {
     // fixture has s1 + s2; a negative limit must not return everything
     expect(listSessions(db, -1, 0, NOW)).toHaveLength(1)
     expect(listSessions(db, 50, -5, NOW)).toHaveLength(2)
+    expect(listSessions(db, 2.5, 0, NOW)).toHaveLength(2)   // fractional must not throw
+    expect(listSessions(db, 50, 0.5, NOW)).toHaveLength(2)
   })
 })

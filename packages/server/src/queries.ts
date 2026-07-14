@@ -92,7 +92,7 @@ export function queryEvents(
   if (f.after_seq !== undefined) { where.push('seq > ?'); params.push(f.after_seq) }
   if (f.before_seq !== undefined) { where.push('seq < ?'); params.push(f.before_seq) }
 
-  const limit = Math.min(Math.max(1, f.limit ?? DEFAULT_LIMIT), MAX_LIMIT)
+  const limit = Math.min(Math.max(1, Math.trunc(f.limit ?? DEFAULT_LIMIT)), MAX_LIMIT)
   const rows = db
     .prepare(`SELECT * FROM events WHERE ${where.join(' AND ')} ORDER BY seq ASC LIMIT ?`)
     .all(...params, limit) as EventRow[]
@@ -145,8 +145,8 @@ function rowToSession(row: SessionRow, now: number): SessionSummary {
 }
 
 export function listSessions(db: Db, limit: number, offset: number, now: number): SessionSummary[] {
-  const safeLimit = Math.min(Math.max(1, limit), 1000)
-  const safeOffset = Math.max(0, offset)
+  const safeLimit = Math.min(Math.max(1, Math.trunc(limit)), 1000)
+  const safeOffset = Math.max(0, Math.trunc(offset))
   const rows = db
     .prepare('SELECT * FROM sessions ORDER BY last_ts DESC LIMIT ? OFFSET ?')
     .all(safeLimit, safeOffset) as SessionRow[]
