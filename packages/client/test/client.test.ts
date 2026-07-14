@@ -95,4 +95,29 @@ describe('@deblog/client', () => {
     expect(dropNotice!.msg).toMatch(/dropped 50 events/)
     warnSpy.mockRestore()
   })
+
+  it('a non-serializable ctx never throws and never wedges the buffer', async () => {
+    initDeblog({ source: 'webapp', sessionId: 's1' })
+    const log = createLog('poison')
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    expect(() => log.info('bad', circular)).not.toThrow()
+    log.info('good')
+    await flush()
+    const sent = sentBatches().flat()
+    expect(sent.some((e) => e.msg === 'good')).toBe(true)
+    expect(sent.some((e) => e.msg === 'bad')).toBe(false)
+    // buffer drained: a subsequent event still flows
+    log.info('after')
+    await flush()
+    expect(sentBatches().flat().some((e) => e.msg === 'after')).toBe(true)
+  })
+
+  it('repeated initDeblog does not stack process listeners', () => {
+    const before = process.listenerCount('beforeExit')
+    initDeblog({ source: 'a' })
+    initDeblog({ source: 'b' })
+    initDeblog({ source: 'c' })
+    expect(process.listenerCount('beforeExit')).toBeLessThanOrEqual(before + 1)
+  })
 })

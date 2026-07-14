@@ -52,6 +52,7 @@ interface State {
 }
 
 let state: State | null = null
+let listenersInstalled = false
 
 export function initDeblog(opts: InitOptions): { sessionId: string } {
   if (opts.enabled === false) {
@@ -69,17 +70,20 @@ export function initDeblog(opts: InitOptions): { sessionId: string } {
     warned: false,
     flushing: false,
   }
-  if (typeof document !== 'undefined') {
-    // pagehide + visibilitychange are the reliable teardown signals;
-    // unload/beforeunload are not.
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') beaconFlush()
-    })
-    addEventListener('pagehide', () => beaconFlush())
-  } else if (typeof process !== 'undefined' && typeof process.on === 'function') {
-    process.on('beforeExit', () => {
-      void flush()
-    })
+  if (!listenersInstalled) {
+    listenersInstalled = true
+    if (typeof document !== 'undefined') {
+      // pagehide + visibilitychange are the reliable teardown signals;
+      // unload/beforeunload are not.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') beaconFlush()
+      })
+      addEventListener('pagehide', () => beaconFlush())
+    } else if (typeof process !== 'undefined' && typeof process.on === 'function') {
+      process.on('beforeExit', () => {
+        void flush()
+      })
+    }
   }
   return { sessionId: state.sessionId }
 }
@@ -141,6 +145,21 @@ function scheduleFlush(s: State, ms: number): void {
   ;(s.timer as { unref?: () => void }).unref?.()
 }
 
+/** Serialize events individually so one non-serializable ctx (circular ref,
+    BigInt) cannot throw into the host app or wedge the whole buffer. */
+function serializeBatch(batch: WireEvent[]): { body: string | null; poison: number } {
+  const parts: string[] = []
+  let poison = 0
+  for (const ev of batch) {
+    try {
+      parts.push(JSON.stringify(ev))
+    } catch {
+      poison++
+    }
+  }
+  return { body: parts.length > 0 ? `[${parts.join(',')}]` : null, poison }
+}
+
 /** Force-send everything buffered. Never throws. */
 export async function flush(): Promise<void> {
   const s = state
@@ -154,13 +173,17 @@ export async function flush(): Promise<void> {
   try {
     while (s.buffer.length > 0) {
       const batch = s.buffer.slice(0, MAX_BATCH)
-      const res = await fetch(`${s.url}/v1/log`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(batch),
-      })
-      if (!res.ok) throw new Error(`server responded ${res.status}`)
+      const { body, poison } = serializeBatch(batch)
+      if (body !== null) {
+        const res = await fetch(`${s.url}/v1/log`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+        })
+        if (!res.ok) throw new Error(`server responded ${res.status}`)
+      }
       s.buffer.splice(0, batch.length)
+      s.dropped += poison
       s.warned = false
       if (s.dropped > 0) {
         const n = s.dropped
@@ -187,13 +210,19 @@ export async function flush(): Promise<void> {
 }
 
 function beaconFlush(): void {
-  const s = state
-  if (!s || s.buffer.length === 0) return
-  if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return
-  // A string body is a "simple" text/plain request — no CORS preflight, which
-  // sendBeacon cannot perform. The server parses text/plain as JSON for this.
-  const batch = s.buffer.splice(0, MAX_BATCH)
-  navigator.sendBeacon(`${s.url}/v1/log`, JSON.stringify(batch))
+  try {
+    const s = state
+    if (!s || s.buffer.length === 0) return
+    if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return
+    // A string body is a "simple" text/plain request — no CORS preflight, which
+    // sendBeacon cannot perform. The server parses text/plain as JSON for this.
+    const batch = s.buffer.slice(0, MAX_BATCH)
+    const { body } = serializeBatch(batch)
+    if (body !== null) navigator.sendBeacon(`${s.url}/v1/log`, body)
+    s.buffer.splice(0, batch.length)
+  } catch {
+    // never throw into the host app
+  }
 }
 
 /** Test hook: clear module state. */
