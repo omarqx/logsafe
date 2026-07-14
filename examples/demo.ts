@@ -6,8 +6,10 @@
  */
 import os from 'node:os'
 import path from 'node:path'
+import fs from 'node:fs'
 import { openDb } from '../packages/server/src/db.js'
 import { buildApp } from '../packages/server/src/app.js'
+import { registerSpa } from '../packages/server/src/spa.js'
 import { initLogsafe, createLog, flush } from '../packages/client/src/index.js'
 
 const PORT = Number(process.env.PORT ?? 4600)
@@ -17,8 +19,15 @@ const KEEP = process.argv.includes('--keep')
 
 const db = openDb(DB_PATH)
 const app = buildApp({ db })
+
+// Serve the web UI too, if it's been built (npm run build:ui) — so
+// `npm run demo -- --keep` opens a browsable session, not just an API.
+const publicDir = path.join(import.meta.dirname, '..', 'packages', 'server', 'public')
+const hasUi = fs.existsSync(publicDir)
+if (hasUi) await registerSpa(app, publicDir)
+
 await app.listen({ host: '127.0.0.1', port: PORT })
-console.log(`server up at ${BASE} (db: ${DB_PATH})`)
+console.log(`server up at ${BASE} (db: ${DB_PATH})${hasUi ? '' : '  [web UI not built — run `npm run build:ui`]'}`)
 
 // ---- emit: webapp source via logsafe-client -------------------------------
 const { sessionId } = initLogsafe({
@@ -111,7 +120,7 @@ const ndjson = await (await fetch(`${BASE}/api/sessions/${sessionId}/export.ndjs
 check('ndjson export has 105 lines', ndjson.trim().split('\n').length === 105)
 
 console.log(`
-Explore it yourself:
+Explore it yourself:${hasUi ? `\n  web UI:  ${BASE}/s/${sessionId}` : ''}
   curl '${BASE}/api/sessions'
   curl '${BASE}/api/sessions/${sessionId}/events?level=error'
   curl '${BASE}/api/sessions/${sessionId}/events?ns=payment.*,cart:*'
@@ -121,7 +130,11 @@ Explore it yourself:
 `)
 
 if (KEEP) {
-  console.log('server still running (--keep). Ctrl-C to stop.')
+  console.log(
+    hasUi
+      ? `server still running (--keep). Open ${BASE}/s/${sessionId} in a browser. Ctrl-C to stop.`
+      : 'server still running (--keep). Ctrl-C to stop.',
+  )
 } else {
   await app.close()
   process.exit(failures === 0 ? 0 : 1)

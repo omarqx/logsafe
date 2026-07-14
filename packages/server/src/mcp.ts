@@ -18,9 +18,7 @@ function fail(message: string): ToolResult {
   return { content: [{ type: 'text', text: message }], isError: true }
 }
 
-export async function runMcp(urlArg?: string): Promise<void> {
-  const base = (urlArg ?? process.env.LOGSAFE_URL ?? DEFAULT_URL).replace(/\/+$/, '')
-
+export function createMcpServer(base: string): McpServer {
   async function api(path: string): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
     let res: Response
     try {
@@ -122,5 +120,11 @@ export async function runMcp(urlArg?: string): Promise<void> {
     },
   )
 
+  return server
+}
+
+export async function runMcp(urlArg?: string): Promise<void> {
+  const base = (urlArg ?? process.env.LOGSAFE_URL ?? DEFAULT_URL).replace(/\/+$/, '')
+  const server = createMcpServer(base)
   await server.connect(new StdioServerTransport())
 }

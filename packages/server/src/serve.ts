@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import { openDb } from './db.js'
 import { buildApp } from './app.js'
 import { registerSpa } from './spa.js'
+import { registerMcpHttp } from './mcp-http.js'
 import { pruneSessions } from './retention.js'
 
 function envNumber(name: string, fallback: number): number {
@@ -32,6 +33,9 @@ export async function serve(): Promise<void> {
     await registerSpa(app, publicDir)
   }
 
+  const SELF_BASE = `http://127.0.0.1:${PORT}`
+  registerMcpHttp(app, SELF_BASE)
+
   function safePrune(): void {
     try {
       const pruned = pruneSessions(db, RETENTION_DAYS, Date.now())
@@ -46,4 +50,5 @@ export async function serve(): Promise<void> {
 
   const address = await app.listen({ host: '127.0.0.1', port: PORT })
   console.log(`[logsafe] listening on ${address}  (db: ${DB_PATH}, retention: ${RETENTION_DAYS}d)`)
+  console.log(`[logsafe] MCP endpoint: ${address}/mcp`)
 }
