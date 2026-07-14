@@ -105,6 +105,22 @@ describe('eventMatches', () => {
     expect(eventMatches(f, ev({ msg: 'nothing', ctx: null }))).toBe(false)
   })
 
+  it('q: ASCII-only case folding, mirroring SQLite LIKE (not full Unicode toLowerCase)', () => {
+    // 'İ' (U+0130, Turkish dotted capital I) lowercases to 'i̇' under full
+    // Unicode folding, which would make 'istanbul' match — but SQLite LIKE
+    // only folds ASCII, so it does not match, and neither should we.
+    expect(eventMatches({ q: 'istanbul' }, ev({ msg: 'İstanbul error' }))).toBe(false)
+
+    // ASCII case folding still works as before.
+    expect(eventMatches({ q: 'ERROR' }, ev({ msg: 'an error' }))).toBe(true)
+
+    // Non-ASCII letters are matched literally (no folding at all): the
+    // exact accented case matches, but the differently-cased accented
+    // variant does not.
+    expect(eventMatches({ q: 'café' }, ev({ msg: 'café' }))).toBe(true)
+    expect(eventMatches({ q: 'CAFÉ' }, ev({ msg: 'café' }))).toBe(false)
+  })
+
   it('combines multiple filters with AND', () => {
     const f: Filters = { level: 'error', source: 'api' }
     expect(eventMatches(f, ev({ level: 'error', source: 'api' }))).toBe(true)

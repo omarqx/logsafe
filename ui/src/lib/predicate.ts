@@ -28,10 +28,18 @@ export function matchNs(pattern: string, ns: string): boolean {
   return nsPatternToRegExp(pattern).test(ns)
 }
 
+/** SQLite LIKE folds only ASCII case — mirror that exactly. */
+function asciiLower(s: string): string {
+  return s.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32))
+}
+
 /**
  * Mirrors queryEvents' WHERE clause: every filter present is AND-ed together;
  * ns/level/source are comma-lists OR-ed within themselves; trace is exact;
- * q is a case-insensitive substring search over msg OR JSON.stringify(ctx)
+ * q is a substring search over msg OR JSON.stringify(ctx), case-insensitive
+ * only for ASCII letters — mirrors SQLite LIKE, which does not fold
+ * non-ASCII case (e.g. 'İ'/'i' don't match) — via asciiLower, not
+ * String.prototype.toLowerCase (which does full Unicode folding)
  * (ctx === null never matches q, same as `ctx LIKE ?` against a SQL NULL).
  */
 export function eventMatches(f: Filters, ev: StoredEvent): boolean {
@@ -51,9 +59,9 @@ export function eventMatches(f: Filters, ev: StoredEvent): boolean {
     if (ev.trace !== f.trace) return false
   }
   if (f.q) {
-    const q = f.q.toLowerCase()
-    const inMsg = ev.msg.toLowerCase().includes(q)
-    const inCtx = ev.ctx !== null && JSON.stringify(ev.ctx).toLowerCase().includes(q)
+    const q = asciiLower(f.q)
+    const inMsg = asciiLower(ev.msg).includes(q)
+    const inCtx = ev.ctx !== null && asciiLower(JSON.stringify(ev.ctx)).includes(q)
     if (!inMsg && !inCtx) return false
   }
   return true

@@ -218,18 +218,33 @@ describe('useEventStream: refetch on filter change', () => {
 })
 
 describe('useEventStream: pins', () => {
-  it('resolves pins already present in events without a fetch, and fetches missing ones via after_seq=seq-1&limit=1', async () => {
+  // The pin-resolution effect intentionally depends on [sessionId, pinSeqsKey]
+  // only (not `events` — see the comment in useEventStream.ts), so it only
+  // consults eventsRef for "already loaded" pins at the moment pinSeqsKey
+  // changes. These tests add pins via rerender *after* the initial load has
+  // settled, so the already-loaded fast path is actually exercised.
+
+  it('resolves a pin already present in events without an extra fetch, and fetches missing ones via after_seq=seq-1&limit=1', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ events: [ev({ seq: 1 }), ev({ seq: 2 })], next_after_seq: null }),
     )
     const { result, rerender } = renderHook(
       ({ pins }: { pins: number[] }) => useEventStream('s1', new URLSearchParams(), pins),
-      { initialProps: { pins: [1] } },
+      { initialProps: { pins: [] as number[] } },
     )
     await act(async () => flush())
-    expect(result.current[0].pinned.map((e) => e.seq)).toEqual([1])
+    expect(result.current[0].events.map((e) => e.seq)).toEqual([1, 2])
 
-    // pin a seq that was filtered out of `events` entirely (never loaded)
+    const callsBeforePin = fetchMock.mock.calls.length
+    rerender({ pins: [1] })
+    await act(async () => flush())
+
+    expect(result.current[0].pinned.map((e) => e.seq)).toEqual([1])
+    // seq 1 was already loaded into eventsRef by the initial page — reused
+    // from there, no extra network round trip.
+    expect(fetchMock.mock.calls.length).toBe(callsBeforePin)
+
+    // pin a seq that was never loaded — must be fetched directly
     fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 42 })], next_after_seq: null }))
     rerender({ pins: [1, 42] })
     await act(async () => flush())
@@ -243,9 +258,68 @@ describe('useEventStream: pins', () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ events: [ev({ seq: 1 }), ev({ seq: 2 }), ev({ seq: 3 })], next_after_seq: null }),
     )
-    const { result } = renderHook(() => useEventStream('s1', new URLSearchParams(), [3, 1, 2]))
+    const { result, rerender } = renderHook(
+      ({ pins }: { pins: number[] }) => useEventStream('s1', new URLSearchParams(), pins),
+      { initialProps: { pins: [] as number[] } },
+    )
+    await act(async () => flush())
+
+    rerender({ pins: [3, 1, 2] })
     await act(async () => flush())
     expect(result.current[0].pinned.map((e) => e.seq)).toEqual([1, 2, 3])
+  })
+
+  it('does not thrash the pin fetch: fetchEventsPage for an unresolved pin is called exactly once despite 5 tail events arriving', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 1 })], next_after_seq: null }))
+    // The direct pin fetch (after_seq=98&limit=1) never settles during this
+    // test — it stands in for "still in flight" while tail events arrive.
+    let resolvePinFetch: (v: Response) => void = () => {}
+    const pinFetchPromise = new Promise<Response>((resolve) => {
+      resolvePinFetch = resolve
+    })
+    fetchMock.mockImplementationOnce(() => pinFetchPromise)
+
+    const { result } = renderHook(() => useEventStream('s1', new URLSearchParams(), [99]))
+    await act(async () => flush())
+
+    expect(instances).toHaveLength(1)
+    const es = instances[0]
+    for (let i = 0; i < 5; i++) {
+      act(() => es.emit('log', ev({ seq: 2 + i })))
+    }
+    await act(async () => flush())
+
+    const pinCalls = fetchMock.mock.calls.filter((c) => (c[0] as string).includes('after_seq=98'))
+    expect(pinCalls).toHaveLength(1)
+    // the tail events themselves still landed normally, unaffected by the pending pin fetch
+    expect(result.current[0].events.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5, 6])
+
+    resolvePinFetch(jsonResponse({ events: [ev({ seq: 99 })], next_after_seq: null }))
+    await act(async () => flush())
+    expect(result.current[0].pinned.map((e) => e.seq)).toEqual([99])
+  })
+
+  it('discards an in-flight pin fetch result once refetch() bumps the generation before it resolves', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 1 })], next_after_seq: null }))
+    let resolvePinFetch: (v: Response) => void = () => {}
+    const pinFetchPromise = new Promise<Response>((resolve) => {
+      resolvePinFetch = resolve
+    })
+    fetchMock.mockImplementationOnce(() => pinFetchPromise)
+
+    const { result } = renderHook(() => useEventStream('s1', new URLSearchParams(), [99]))
+    await act(async () => flush())
+    expect(result.current[0].pinned).toEqual([])
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 5 })], next_after_seq: null }))
+    act(() => result.current[1].refetch())
+    await act(async () => flush())
+
+    // the stale pin fetch (from before refetch) resolves only now
+    resolvePinFetch(jsonResponse({ events: [ev({ seq: 99 })], next_after_seq: null }))
+    await act(async () => flush())
+
+    expect(result.current[0].pinned).toEqual([])
   })
 })
 

@@ -63,6 +63,10 @@ export function useEventStream(
   const tailRef = useRef<'live' | 'paused'>('live')
   const pendingRef = useRef<StoredEvent[]>([])
   const filtersRef = useRef(filtersFromSearch(apiParams))
+  // Mirrors `events` synchronously (updated everywhere setEvents is), so the
+  // pin-resolution effect below can read the latest events without taking a
+  // dependency on the `events` array reference (see that effect for why).
+  const eventsRef = useRef<StoredEvent[]>([])
 
   const apiParamsKey = apiParams.toString()
 
@@ -74,6 +78,7 @@ export function useEventStream(
     lastSeqRef.current = 0
     setTail('live')
     setPending([])
+    eventsRef.current = []
     setEvents([])
     setError(null)
     setLoading(true)
@@ -111,7 +116,11 @@ export function useEventStream(
           pendingRef.current = [...pendingRef.current, parsed]
           setPending(pendingRef.current)
         } else {
-          setEvents((prev) => [...prev, parsed])
+          setEvents((prev) => {
+            const next = [...prev, parsed]
+            eventsRef.current = next
+            return next
+          })
         }
       })
 
@@ -140,6 +149,7 @@ export function useEventStream(
           after = page.next_after_seq
         }
         if (myGen !== genRef.current) return
+        eventsRef.current = acc
         setEvents(acc)
         setLoading(false)
         connect()
@@ -163,9 +173,9 @@ export function useEventStream(
   }, [sessionId, apiParamsKey, reloadToken])
 
   // Pin resolution: independent of filters/tail. Anything in `pinSeqs`
-  // already present in `events` is reused as-is; anything missing is
-  // fetched directly (the after_seq=seq-1&limit=1 trick from API.md) and
-  // cached so later filter/tail changes don't re-fetch it.
+  // already present in events (via eventsRef, see below) is reused as-is;
+  // anything missing is fetched directly (the after_seq=seq-1&limit=1 trick
+  // from API.md) and cached so later filter/tail changes don't re-fetch it.
   const pinCacheRef = useRef<Map<number, StoredEvent>>(new Map())
   const pinSeqsKey = pinSeqs.join(',')
 
@@ -174,7 +184,25 @@ export function useEventStream(
   }, [sessionId])
 
   useEffect(() => {
-    let cancelled = false
+    // Deliberately depends on [sessionId, pinSeqsKey] only — NOT `events`.
+    // `events` gets a new array reference on every tail SSE frame, and while
+    // any pin is unresolved that used to tear down and restart this effect
+    // on every single incoming event, cancelling the in-flight pin fetch
+    // over and over so it could never complete. Fetching a pin directly by
+    // seq (after_seq=seq-1&limit=1) is cheap and correct on its own — it
+    // doesn't need to wait for or react to the live tail — so we read
+    // "events so far" once via eventsRef.current (kept in sync everywhere
+    // setEvents is called) instead of subscribing to every update. Trade-off:
+    // if a pinned seq isn't yet in eventsRef/cache when this effect runs, it
+    // costs one network round trip even though the matching event might
+    // arrive in the stream moments later; that's fine since pin sets change
+    // far less often than tail volume, and the result is cached regardless.
+    //
+    // Staleness uses the hook's shared generation counter (genRef), not a
+    // local `cancelled` flag, so this fetch is invalidated the same way
+    // every other async continuation in this hook is: on sessionId/apiParams
+    // change, refetch(), or unmount.
+    const myGen = genRef.current
 
     async function resolvePins(): Promise<void> {
       const results: StoredEvent[] = []
@@ -184,7 +212,7 @@ export function useEventStream(
           results.push(cached)
           continue
         }
-        const found = events.find((e) => e.seq === seq)
+        const found = eventsRef.current.find((e) => e.seq === seq)
         if (found) {
           pinCacheRef.current.set(seq, found)
           results.push(found)
@@ -192,7 +220,7 @@ export function useEventStream(
         }
         try {
           const page = await fetchEventsPage(sessionId, new URLSearchParams(), seq - 1, 1)
-          if (cancelled) return
+          if (myGen !== genRef.current) return
           const resolved = page.events[0]
           if (resolved) {
             pinCacheRef.current.set(seq, resolved)
@@ -202,18 +230,15 @@ export function useEventStream(
           // A single unresolved pin (e.g. deleted event) shouldn't break the rest.
         }
       }
-      if (cancelled) return
+      if (myGen !== genRef.current) return
       results.sort((a, b) => a.seq - b.seq)
       setPinned(results)
     }
 
     resolvePins()
-    return () => {
-      cancelled = true
-    }
     // pinSeqsKey stands in for pinSeqs (new array identity every render).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, pinSeqsKey, events])
+  }, [sessionId, pinSeqsKey])
 
   const pause = useCallback(() => {
     tailRef.current = 'paused'
@@ -228,7 +253,11 @@ export function useEventStream(
     // see the just-cleared array instead of what we're flushing.
     const flushed = pendingRef.current
     pendingRef.current = []
-    setEvents((prev) => [...prev, ...flushed])
+    setEvents((prev) => {
+      const next = [...prev, ...flushed]
+      eventsRef.current = next
+      return next
+    })
     setPending([])
   }, [])
 
