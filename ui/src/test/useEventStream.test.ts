@@ -321,6 +321,66 @@ describe('useEventStream: pins', () => {
 
     expect(result.current[0].pinned).toEqual([])
   })
+
+  it('drops a stale pin resolution when the pin set changes while a fetch is in flight (unpin race)', async () => {
+    // Reproduces the critical bug: mount with pins=[99] (fetch in flight),
+    // then unpin before it resolves — the old run's fetch must not
+    // resurrect the removed pin when it finally settles.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 1 })], next_after_seq: null }))
+    let resolvePinFetch: (v: Response) => void = () => {}
+    const pinFetchPromise = new Promise<Response>((resolve) => {
+      resolvePinFetch = resolve
+    })
+    fetchMock.mockImplementationOnce(() => pinFetchPromise)
+
+    const { result, rerender } = renderHook(
+      ({ pins }: { pins: number[] }) => useEventStream('s1', new URLSearchParams(), pins),
+      { initialProps: { pins: [99] as number[] } },
+    )
+    await act(async () => flush())
+    expect(result.current[0].pinned).toEqual([])
+
+    // Unpin before the in-flight fetch for seq 99 resolves.
+    rerender({ pins: [] })
+    await act(async () => flush())
+    expect(result.current[0].pinned).toEqual([])
+
+    // The stale run's fetch resolves after the unpin — must not resurrect the pin.
+    resolvePinFetch(jsonResponse({ events: [ev({ seq: 99 })], next_after_seq: null }))
+    await act(async () => flush())
+    expect(result.current[0].pinned).toEqual([])
+  })
+
+  it('resolves correctly when the pin set grows while an earlier pin fetch is still in flight', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 1 })], next_after_seq: null }))
+    let resolveStalePinFetch: (v: Response) => void = () => {}
+    const stalePinFetchPromise = new Promise<Response>((resolve) => {
+      resolveStalePinFetch = resolve
+    })
+    fetchMock.mockImplementationOnce(() => stalePinFetchPromise)
+
+    const { result, rerender } = renderHook(
+      ({ pins }: { pins: number[] }) => useEventStream('s1', new URLSearchParams(), pins),
+      { initialProps: { pins: [99] as number[] } },
+    )
+    await act(async () => flush())
+    expect(result.current[0].pinned).toEqual([])
+
+    // Grow the pin set to [99, 100] while 99's original fetch is still in flight.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 99 })], next_after_seq: null }))
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 100 })], next_after_seq: null }))
+    rerender({ pins: [99, 100] })
+    await act(async () => flush())
+
+    expect(result.current[0].pinned.map((e) => e.seq)).toEqual([99, 100])
+
+    // The stale run's fetch for 99 resolves after the newer run already
+    // fetched both 99 and 100 fresh — it must not append a duplicate.
+    resolveStalePinFetch(jsonResponse({ events: [ev({ seq: 99 })], next_after_seq: null }))
+    await act(async () => flush())
+
+    expect(result.current[0].pinned.map((e) => e.seq)).toEqual([99, 100])
+  })
 })
 
 describe('useEventStream: SSE reconnect', () => {

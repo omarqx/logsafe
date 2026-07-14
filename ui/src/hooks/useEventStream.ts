@@ -178,6 +178,15 @@ export function useEventStream(
   // from API.md) and cached so later filter/tail changes don't re-fetch it.
   const pinCacheRef = useRef<Map<number, StoredEvent>>(new Map())
   const pinSeqsKey = pinSeqs.join(',')
+  // Per-run token: bumped every time the pin effect re-runs (i.e. on every
+  // pinSeqsKey change), independent of genRef (which only bumps on
+  // sessionId/apiParams/reloadToken changes). genRef alone can't detect a
+  // stale pin-resolution run that started under an older pinSeqs value and
+  // is still in flight when pinSeqs changes again within the same
+  // session/generation — e.g. mount with pins=[99] (fetch in flight), then
+  // unpin to pins=[] before it resolves: without this token the old run's
+  // fetch would still pass the genRef check and resurrect the removed pin.
+  const pinRunRef = useRef(0)
 
   useEffect(() => {
     pinCacheRef.current = new Map()
@@ -203,6 +212,7 @@ export function useEventStream(
     // every other async continuation in this hook is: on sessionId/apiParams
     // change, refetch(), or unmount.
     const myGen = genRef.current
+    const myRun = ++pinRunRef.current
 
     async function resolvePins(): Promise<void> {
       const results: StoredEvent[] = []
@@ -220,7 +230,7 @@ export function useEventStream(
         }
         try {
           const page = await fetchEventsPage(sessionId, new URLSearchParams(), seq - 1, 1)
-          if (myGen !== genRef.current) return
+          if (myGen !== genRef.current || myRun !== pinRunRef.current) return
           const resolved = page.events[0]
           if (resolved) {
             pinCacheRef.current.set(seq, resolved)
@@ -230,7 +240,7 @@ export function useEventStream(
           // A single unresolved pin (e.g. deleted event) shouldn't break the rest.
         }
       }
-      if (myGen !== genRef.current) return
+      if (myGen !== genRef.current || myRun !== pinRunRef.current) return
       results.sort((a, b) => a.seq - b.seq)
       setPinned(results)
     }
