@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { openDb } from '../src/db.js'
+import os from 'node:os'
+import fs from 'node:fs'
+import path from 'node:path'
 
 describe('openDb', () => {
   it('creates schema and enables WAL', () => {
@@ -12,8 +15,15 @@ describe('openDb', () => {
     expect(['wal', 'memory']).toContain(db.pragma('journal_mode', { simple: true }))
   })
 
-  it('is idempotent (schema uses IF NOT EXISTS)', () => {
-    const db = openDb(':memory:')
-    expect(() => db.exec('SELECT 1')).not.toThrow()
+  it('is idempotent: reopening the same file re-applies schema safely', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'deblog-test-')), 'test.db')
+    const first = openDb(file)
+    first.prepare(`INSERT INTO sessions (id, first_ts, last_ts) VALUES ('s', 1, 1)`).run()
+    first.close()
+    const again = openDb(file) // second run must not throw or clobber data
+    expect(again.pragma('journal_mode', { simple: true })).toBe('wal')
+    const row = again.prepare('SELECT id FROM sessions').get() as { id: string }
+    expect(row.id).toBe('s')
+    again.close()
   })
 })
