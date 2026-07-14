@@ -22,15 +22,11 @@ permissive (any origin may call this API — it's a local debugging tool).
 
 Ingest one event (a JSON object) or a batch (a JSON array of objects).
 
-- `Content-Type: application/json` — normal path.
-- `Content-Type: text/plain` — accepted and parsed as JSON. This exists
-  because `navigator.sendBeacon` can only send "simple" content types (no
-  CORS preflight); the `@deblog/client` unload path uses it. The body must
-  still be valid JSON.
-- Any other content type (including the `application/x-www-form-urlencoded`
-  that `curl -d` sends by default when no `-H content-type` is given, or no
-  `Content-Type` header at all) → `415 Unsupported Media Type`. Always set
-  `Content-Type: application/json` explicitly (or use `curl --json`).
+**Content-Type handling:** The server accepts **any** `Content-Type` header and
+parses the body as JSON. This means bare `curl -d '...'` works without extra
+headers (it sends `application/x-www-form-urlencoded`), and
+`navigator.sendBeacon` works (it sends `text/plain`). The body must still be
+valid JSON; invalid JSON returns `400`.
 
 ### Event fields
 
@@ -86,21 +82,27 @@ individual events.
 | Code | When |
 |---|---|
 | `202` | Always for a well-formed batch (array), even if every event in it was rejected (`accepted: 0`). For a single object, when that one event was valid. |
-| `400` | Single-object body that is not a salvageable event (not a JSON object, or missing/`null`/empty `msg`), **or** the request body is not valid JSON at all (malformed JSON → Fastify's built-in parser error, `400`). |
+| `400` | Single-object body that is not a salvageable event (not a JSON object, or missing/`null`/empty `msg`), **or** the request body is not valid JSON at all (any content type, malformed JSON → `400`). |
 | `413` | Batch array longer than **1000** events (`{"error":"batch exceeds 1000 events"}`), or request body exceeds the **5 MB** body limit (Fastify's default payload-too-large response). |
-| `415` | `Content-Type` is missing or is neither `application/json` nor `text/plain` (see above). |
 
 ### curl example
 
+Bare curl (no headers needed):
 ```bash
-curl -s localhost:4600/v1/log -H 'content-type: application/json' -d '{"msg":"hello world"}'
+curl -s localhost:4600/v1/log -d '{"msg":"hello world"}'
 # {"accepted":1,"rejected":0}
 
-curl -s localhost:4600/v1/log -H 'content-type: application/json' -d '[
+curl -s localhost:4600/v1/log -d '[
   {"msg":"request start","session_id":"s1","source":"api","ns":"http","trace":"req-1"},
   {"msg":"request done","session_id":"s1","source":"api","ns":"http","trace":"req-1","level":"info"}
 ]'
 # {"accepted":2,"rejected":0}
+```
+
+Or with an explicit content-type header (optional):
+```bash
+curl -s localhost:4600/v1/log -H 'content-type: application/json' -d '{"msg":"hello"}'
+# {"accepted":1,"rejected":0}
 ```
 
 ---

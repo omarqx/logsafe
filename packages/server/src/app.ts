@@ -45,15 +45,24 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
 
   app.register(cors, { origin: true })
 
-  // navigator.sendBeacon can only send "simple" content types without a CORS
-  // preflight it cannot perform, so the browser helper beacons text/plain.
-  app.addContentTypeParser(['text/plain'], { parseAs: 'string' }, (_req, body, done) => {
-    try {
-      done(null, JSON.parse(body as string))
-    } catch (err) {
-      done(err as Error, undefined)
+  // Be maximally accepting about content types: bare `curl -d` sends
+  // x-www-form-urlencoded, sendBeacon sends text/plain — parse any body as JSON.
+  const parseAsJson = (_req: unknown, body: unknown, done: (err: Error | null, body?: unknown) => void) => {
+    if (typeof body !== 'string' || body === '') {
+      return done(null, body)
     }
-  })
+    try {
+      done(null, JSON.parse(body))
+    } catch (err) {
+      // Pass the parse error so Fastify returns 400; this covers bare curl with
+      // x-www-form-urlencoded sending invalid JSON
+      const error = new Error(`Invalid JSON: ${(err as Error).message}`)
+      ;(error as any).statusCode = 400
+      done(error, undefined)
+    }
+  }
+  app.addContentTypeParser(['text/plain', 'application/x-www-form-urlencoded'], { parseAs: 'string' }, parseAsJson)
+  app.addContentTypeParser('*', { parseAs: 'string' }, parseAsJson)
 
   const hub = new SseHub()
   const afterInsert = (events: StoredEvent[]): void => {

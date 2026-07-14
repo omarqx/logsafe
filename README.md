@@ -21,7 +21,7 @@ npm start
 Send it a log line:
 
 ```bash
-curl -s localhost:4600/v1/log -H 'content-type: application/json' -d '{"msg":"hello world"}'
+curl -s localhost:4600/v1/log -d '{"msg":"hello world"}'
 # {"accepted":1,"rejected":0}
 
 curl -s localhost:4600/api/sessions | jq
@@ -70,7 +70,7 @@ There's no SDK requirement — anything that can make an HTTP request can log
 to deblog. Send a JSON object or a JSON array of objects to `POST /v1/log`:
 
 ```bash
-curl -s localhost:4600/v1/log -H 'content-type: application/json' -d '[
+curl -s localhost:4600/v1/log -d '[
   {"session_id": "s1", "source": "api", "ns": "http", "level": "info",  "msg": "GET /api/cart 200", "ctx": {"ms": 12}},
   {"session_id": "s1", "source": "api", "ns": "http", "level": "error", "msg": "POST /api/checkout 500", "ctx": {"ms": 340}}
 ]'

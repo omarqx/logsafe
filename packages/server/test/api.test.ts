@@ -48,6 +48,12 @@ describe('POST /v1/log', () => {
     expect(res.json()).toEqual({ accepted: 1, rejected: 0 })
   })
 
+  it('parses bodies with any content type as JSON (bare curl -d)', async () => {
+    const res = await post(JSON.stringify({ msg: 'bare curl', session_id: 's1' }), 'application/x-www-form-urlencoded')
+    expect(res.statusCode).toBe(202)
+    expect(res.json()).toEqual({ accepted: 1, rejected: 0 })
+  })
+
   it('sends permissive CORS headers', async () => {
     const res = await app.inject({
       method: 'OPTIONS',
