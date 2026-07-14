@@ -58,3 +58,15 @@ export function binEvents(
 
   return { bins, errors }
 }
+
+/**
+ * Maps a fractional position (0..1) along the minimap strip — e.g. from a
+ * click/drag `clientY` normalized against the strip's bounding rect — to the
+ * nearest loaded event index, for click-to-jump. `count` is the number of
+ * currently loaded (filtered) events; returns 0 when there are none.
+ */
+export function minimapFractionToIndex(fraction: number, count: number): number {
+  if (count <= 0) return 0
+  const clamped = Math.min(1, Math.max(0, fraction))
+  return Math.min(count - 1, Math.round(clamped * (count - 1)))
+}

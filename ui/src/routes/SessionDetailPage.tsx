@@ -13,15 +13,49 @@ import { useEventStream } from '../hooks/useEventStream'
 import { filtersFromSearch, filtersToSearch, filtersToApiParams, toggleErrorLevel, type Filters } from '../lib/filters'
 import { formatTs, formatDuration, type TsMode } from '../lib/time'
 import { sourceColorIndex } from '../lib/sources'
+import { binEvents, minimapFractionToIndex, type MinimapBin } from '../lib/minimap'
 import { CmdBar } from '../components/CmdBar'
 import { LogRow } from '../components/LogRow'
 import { PinnedStrip } from '../components/PinnedStrip'
 import { StatusBar } from '../components/StatusBar'
+import { Minimap, type MinimapErrorMark } from '../components/Minimap'
 
 const ROW_H = 20
 const OVERSCAN = 40
 const SESSION_POLL_MS = 5000
 const TS_ORDER: TsMode[] = ['abs', 'rel', 'delta']
+const MINIMAP_BIN_COUNT = 60
+// binEvents does an O(n) pass over the full event list. `state.events` gets a
+// new array identity on every SSE tail frame while live, so recomputing on
+// every render would make the minimap an O(n)-per-incoming-event cost during
+// a busy tail. Throttle recompute to ~4/s (250ms) while tail is live;
+// recompute immediately for any other transition (paused, filter change,
+// initial load) since those are low-frequency and user-driven, where
+// staleness would actually be visible.
+const MINIMAP_THROTTLE_MS = 250
+
+interface MinimapData {
+  bins: MinimapBin[]
+  errors: MinimapErrorMark[]
+}
+
+function computeMinimapData(events: StoredEvent[]): MinimapData {
+  const { bins, errors } = binEvents(events, MINIMAP_BIN_COUNT)
+  // binEvents pushes an error mark, in event order, for every 'error'-level
+  // event but only returns its `top` position (it's a pure ts/level ->
+  // geometry mapping with no knowledge of StoredEvent's seq field) — zip the
+  // marks back up with the seq of the error event at the same ordinal
+  // position so the minimap can show/jump to a specific seq.
+  const marks: MinimapErrorMark[] = []
+  let mi = 0
+  for (const ev of events) {
+    if (ev.level === 'error') {
+      marks.push({ top: errors[mi]!.top, seq: ev.seq })
+      mi++
+    }
+  }
+  return { bins, errors: marks }
+}
 
 function isEditable(el: Element | null): boolean {
   if (!el) return false
@@ -233,6 +267,66 @@ export function SessionDetailPage() {
     eventsRef.current = state.events
   }, [state.events])
 
+  // --- minimap data (throttled, see MINIMAP_THROTTLE_MS above) ----------
+
+  const [minimapData, setMinimapData] = useState<MinimapData>(() => computeMinimapData(state.events))
+  const minimapTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (state.tail !== 'live') {
+      setMinimapData(computeMinimapData(state.events))
+      return
+    }
+    if (minimapTimerRef.current !== null) return // a recompute is already scheduled this window
+    minimapTimerRef.current = window.setTimeout(() => {
+      minimapTimerRef.current = null
+      setMinimapData(computeMinimapData(eventsRef.current))
+    }, MINIMAP_THROTTLE_MS)
+  }, [state.events, state.tail])
+
+  // True-unmount-only cleanup for the pending timer. Deliberately not the
+  // per-dependency-change cleanup of the effect above: that would cancel and
+  // reschedule on every SSE tail frame, turning the throttle into a debounce
+  // (never firing while events keep streaming in). Must also null the ref,
+  // not just clearTimeout it — React StrictMode's dev-mode mount → cleanup →
+  // remount cycle runs this cleanup once even though the component stays
+  // mounted; leaving a dangling non-null ref after clearing would make the
+  // `!== null` guard above think a recompute is still scheduled forever,
+  // and the minimap would never populate after the first render.
+  useEffect(
+    () => () => {
+      if (minimapTimerRef.current !== null) {
+        clearTimeout(minimapTimerRef.current)
+        minimapTimerRef.current = null
+      }
+    },
+    [],
+  )
+
+  const jumpToFraction = useCallback(
+    (fraction: number) => {
+      const events = eventsRef.current
+      if (events.length === 0) return
+      if (state.tail === 'live') pause()
+      const idx = minimapFractionToIndex(fraction, events.length)
+      setSelSeq(events[idx].seq)
+      rowVirtualizer.scrollToIndex(idx, { align: 'center' })
+    },
+    [state.tail, pause, setSelSeq, rowVirtualizer],
+  )
+
+  const jumpToError = useCallback(
+    (seq: number) => {
+      const events = eventsRef.current
+      const idx = events.findIndex((ev) => ev.seq === seq)
+      if (idx === -1) return
+      if (state.tail === 'live') pause()
+      setSelSeq(seq)
+      rowVirtualizer.scrollToIndex(idx, { align: 'center' })
+    },
+    [state.tail, pause, setSelSeq, rowVirtualizer],
+  )
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -329,6 +423,22 @@ export function SessionDetailPage() {
   const activeChipCount = Object.values(filters).filter((v) => Boolean(v)).length
   const pinnedSet = useMemo(() => new Set(pinSeqs), [pinSeqs])
 
+  // Minimap viewport indicator: percentages 0..100 of the strip's height.
+  // While tail is live it's pinned to the bottom outright (matching the
+  // stick-to-bottom scroll behavior) rather than trusting the virtualizer's
+  // scrollOffset, which can lag a frame behind a just-arrived tail row
+  // before the stick-to-bottom effect commits the scrollTop write.
+  const minimapTotalSize = rowVirtualizer.getTotalSize()
+  const minimapViewportPx = rowVirtualizer.scrollRect?.height ?? 0
+  const minimapViewportHeight =
+    minimapTotalSize > 0 ? Math.min(100, (minimapViewportPx / minimapTotalSize) * 100) : 100
+  const minimapViewportTop =
+    state.tail === 'live'
+      ? Math.max(0, 100 - minimapViewportHeight)
+      : minimapTotalSize > 0
+        ? ((rowVirtualizer.scrollOffset ?? 0) / minimapTotalSize) * 100
+        : 0
+
   return (
     <>
       <div className="crumbbar">
@@ -418,6 +528,14 @@ export function SessionDetailPage() {
             </div>
           )}
         </div>
+        <Minimap
+          bins={minimapData.bins}
+          errors={minimapData.errors}
+          viewportTop={minimapViewportTop}
+          viewportHeight={minimapViewportHeight}
+          onJump={jumpToFraction}
+          onJumpToError={jumpToError}
+        />
       </div>
 
       <StatusBar

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { binEvents } from '../lib/minimap'
+import { binEvents, minimapFractionToIndex } from '../lib/minimap'
 
 describe('binEvents', () => {
   it('returns empty bins and errors for an empty event list', () => {
@@ -64,5 +64,34 @@ describe('binEvents', () => {
     const { bins, errors } = binEvents(events, 5)
     expect(bins).toEqual([{ top: 0, height: 20, intensity: 1 }])
     expect(errors).toEqual([{ top: 0 }])
+  })
+})
+
+describe('minimapFractionToIndex', () => {
+  it('maps fraction 0 to the first index', () => {
+    expect(minimapFractionToIndex(0, 100)).toBe(0)
+  })
+
+  it('maps fraction 1 to the last index', () => {
+    expect(minimapFractionToIndex(1, 100)).toBe(99)
+  })
+
+  it('maps a mid fraction proportionally', () => {
+    expect(minimapFractionToIndex(0.5, 11)).toBe(5)
+  })
+
+  it('clamps out-of-range fractions', () => {
+    expect(minimapFractionToIndex(-0.5, 10)).toBe(0)
+    expect(minimapFractionToIndex(1.5, 10)).toBe(9)
+  })
+
+  it('returns 0 for an empty (or non-positive) count', () => {
+    expect(minimapFractionToIndex(0.5, 0)).toBe(0)
+    expect(minimapFractionToIndex(0.5, -3)).toBe(0)
+  })
+
+  it('a single event always maps to index 0', () => {
+    expect(minimapFractionToIndex(0, 1)).toBe(0)
+    expect(minimapFractionToIndex(1, 1)).toBe(0)
   })
 })
