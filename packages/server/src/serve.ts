@@ -8,6 +8,8 @@ import { buildApp } from './app.js'
 import { registerSpa } from './spa.js'
 import { registerMcpHttp } from './mcp-http.js'
 import { pruneSessions } from './retention.js'
+import { readPluginConfig } from './plugins/config.js'
+import { loadServerPlugins } from './plugins/loader.js'
 
 function envNumber(name: string, fallback: number): number {
   const raw = process.env[name]
@@ -26,7 +28,10 @@ export async function serve(): Promise<void> {
   const RETENTION_DAYS = envNumber('RETENTION_DAYS', 7)
 
   const db = openDb(DB_PATH)
-  const app = buildApp({ db })
+  const specifiers = readPluginConfig(process.cwd(), process.env)
+  const plugins = await loadServerPlugins(db, specifiers, process.cwd())
+  if (plugins.length > 0) console.log(`[logsafe] loaded ${plugins.length} plugin(s): ${plugins.map((p) => p.manifest.id).join(', ')}`)
+  const app = buildApp({ db, plugins })
 
   const publicDir = path.join(import.meta.dirname, '..', 'public')
   if (fs.existsSync(publicDir)) {
@@ -38,7 +43,8 @@ export async function serve(): Promise<void> {
 
   function safePrune(): void {
     try {
-      const pruned = pruneSessions(db, RETENTION_DAYS, Date.now())
+      const notify = (sid: string): void => { for (const p of plugins) p.plugin.onSessionDelete?.(sid, p.ctx) }
+      const pruned = pruneSessions(db, RETENTION_DAYS, Date.now(), notify)
       if (pruned > 0) console.log(`[logsafe] retention: pruned ${pruned} session(s) older than ${RETENTION_DAYS}d`)
     } catch (err) {
       console.error('[logsafe] retention prune failed (will retry next interval):', (err as Error).message)
