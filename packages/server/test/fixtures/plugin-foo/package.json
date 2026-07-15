@@ -1,0 +1,9 @@
+{
+  "name": "plugin-foo",
+  "version": "0.0.1",
+  "type": "module",
+  "logsafe": {
+    "id": "foo", "apiVersion": "1", "ownedTypes": ["foo"], "priority": 10,
+    "server": "./server.js"
+  }
+}
