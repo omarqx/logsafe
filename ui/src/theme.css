@@ -249,12 +249,54 @@ header .meta em {
 
 /* ── command / filter line ──────────────── */
 .cmdline {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 9px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-raise);
+}
+
+/* ── autocomplete dropdown ──────────────── */
+.suggest-panel {
+  position: absolute;
+  top: 100%;
+  left: 20px;
+  min-width: 240px;
+  max-width: 480px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-top: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+}
+
+.suggest-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 10px;
+  color: var(--dim);
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.suggest-row .hint {
+  color: var(--faint);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggest-row.highlight {
+  color: var(--phos);
+  background: #10150f;
+  box-shadow: inset 2px 0 0 var(--phos);
 }
 
 .prompt {

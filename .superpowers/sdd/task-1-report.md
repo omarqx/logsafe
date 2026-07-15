@@ -1,85 +1,126 @@
-# Task 1 Report: Extract `createMcpServer(base)` from `runMcp`
+# Task 1 Report: Suggest engine + dropdown
 
-## What moved
+## TDD evidence
 
-`packages/server/src/mcp.ts`: everything from the `api()` fetch helper through
-the four `server.tool(...)` registrations (list_sessions, get_session,
-query_events, tail_session) moved verbatim out of `runMcp` into a new
-exported `createMcpServer(base: string): McpServer`. No line inside that
-block was altered — same closures over `base`, same `api()` implementation
-(loopback-tolerant error messages unchanged), same tool descriptions, arg
-shapes (zod schemas), and fetch paths.
+1. **Red:** wrote the full matrix in `ui/src/test/suggest.test.ts` (24 cases
+   covering key-prefix listing/filtering/case-insensitivity, `level:`
+   comma-aware completion incl. `level:warn,e`→`level:warn,error`,
+   `source:` listing `ctx.sources`, `ns:` prefix match + `<partial>*` glob
+   suggestion (including the glob-only case when nothing matches), `trace:`
+   most-recent-first + cap-8, `q:`/bare-free-text → `[]`, an unrecognized
+   `foo:` key → `[]`, and an 8-item cap on level/source pools) before
+   `lib/suggest.ts` existed. Ran `npx vitest run ui/src/test/suggest.test.ts`
+   → failed with "Cannot find module '../lib/suggest'" (red, as expected).
+2. **Green:** implemented `ui/src/lib/suggest.ts` (pure function, no DOM/React
+   import) to the interfaces given in the brief. All 24 cases passed on the
+   first implementation attempt — no fixup iterations needed.
+3. **Component red/green:** added an `autocomplete` describe block to
+   `ui/src/test/CmdBar.test.tsx` (8 new cases: empty+unfocused shows no
+   dropdown, empty+focused shows all 5 key prefixes, ArrowDown+Enter accepts
+   a value completion with a trailing space and does *not* commit, a second
+   plain Enter then commits, plain Enter with the dropdown open but no
+   arrow-key touch still commits today's way, Tab accepts a key completion
+   with no trailing space, mouse click/`mousedown` accepts, Esc-with-dropdown
+   stops the keydown from reaching a document-level listener and doesn't
+   blur, Esc-with-dropdown-closed lets it bubble through as before). Wrote
+   these against the not-yet-wired `CmdBar`, watched them fail, then wired
+   the dropdown state/handlers in `CmdBar.tsx` until all 14 tests in that
+   file (6 pre-existing + 8 new) passed.
 
-`runMcp(urlArg?)` now only: resolves `base` (unchanged line —
-`urlArg ?? process.env.LOGSAFE_URL ?? DEFAULT_URL`, trailing slash stripped),
-calls `const server = createMcpServer(base)`, then
-`await server.connect(new StdioServerTransport())`.
+Final run: `npx vitest run ui/src/test/suggest.test.ts ui/src/test/CmdBar.test.tsx`
+→ 38/38 passed. Full `npm test` → 28 files, 257/257 passed (225 baseline +
+24 suggest + 8 CmdBar). `npm run typecheck` → clean, exit 0.
 
-Module-level `ok`/`fail`/`ToolResult` were already module-level and are
-untouched.
+## Interaction decisions
 
-## Diff shape
-
-```diff
---- a/packages/server/src/mcp.ts
-+++ b/packages/server/src/mcp.ts
-@@ -18,9 +18,7 @@ function fail(message: string): ToolResult {
-   return { content: [{ type: 'text', text: message }], isError: true }
- }
- 
--export async function runMcp(urlArg?: string): Promise<void> {
--  const base = (urlArg ?? process.env.LOGSAFE_URL ?? DEFAULT_URL).replace(/\/+$/, '')
--
-+export function createMcpServer(base: string): McpServer {
-   async function api(path: string): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
-     let res: Response
-     try {
-@@ -122,5 +120,11 @@ export async function runMcp(urlArg?: string): Promise<void> {
-     },
-   )
- 
-+  return server
-+}
-+
-+export async function runMcp(urlArg?: string): Promise<void> {
-+  const base = (urlArg ?? process.env.LOGSAFE_URL ?? DEFAULT_URL).replace(/\/+$/, '')
-+  const server = createMcpServer(base)
-   await server.connect(new StdioServerTransport())
- }
-```
-
-1 file changed, 7 insertions(+), 3 deletions(-). No other files touched;
-`cli.ts` (the only other consumer of `runMcp`) is unaffected since the
-public signature of `runMcp` didn't change.
-
-## Test evidence
-
-- `npx vitest run packages/server/test/mcp.test.ts` — 1 test file, 6/6 tests
-  passed (unmodified file).
-- `npm run typecheck` — clean (`tsc -p packages/server && tsc -p
-  packages/client --noEmit && tsc -p ui --noEmit`), no errors.
-
-## Self-review
-
-- Confirmed byte-for-byte identity of the moved block (only whitespace/brace
-  restructuring at the extraction boundary; tool descriptions, arg shapes,
-  and fetch paths untouched).
-- Confirmed `createMcpServer` is exported and matches the brief's signature
-  `(base: string): McpServer`.
-- Confirmed `ok`/`fail`/`ToolResult` remain module-level (were already, no
-  change needed).
-- Confirmed no other source file references the internals being moved (only
-  `cli.ts` imports `runMcp`, whose external behavior/signature is
-  unchanged).
-- Grep-checked for any other importer of `mcp.ts` exports — none besides
-  `cli.ts` and the existing test.
+- **Current token extraction:** `splitLastToken(text)` in `CmdBar.tsx` uses
+  `/\S*$/` to find the trailing non-whitespace run (possibly empty),
+  guaranteeing `prefix + token === text` for any input including trailing/
+  internal whitespace — this is what both live-suggestion recompute and
+  accept-time replacement key off of, so there's one source of truth for
+  "what token is being typed" instead of two ad hoc string-splits.
+- **Key vs. value completion (trailing space):** rather than adding a field
+  to `Suggestion` (the brief pins that interface to `{insert, label, hint?}`),
+  `CmdBar` infers it structurally: `insert` ending in `:` is a key
+  completion (no trailing space appended on accept); anything else is a
+  value completion (trailing space appended). This holds for every branch
+  of `suggest()` — key prefixes always end `key:`, every value branch
+  (`level:`/`source:`/`ns:`/`trace:`, including the ns glob) never does.
+- **Highlight state:** `highlight: number | null`, starting `null` per the
+  behavioral requirement ("plain Enter must behave exactly as today").
+  ArrowDown/ArrowUp cycle with wraparound once engaged (`(h+1) % length` /
+  `(h-1+length) % length`); Tab/Enter only accept when `highlight !== null`
+  — so a bare Enter with the dropdown merely *visible* (no arrow press yet)
+  still falls through to the existing `parseCmdInput` commit path. Verified
+  by the "plain Enter with no ArrowDown/ArrowUp commits... even while the
+  dropdown is showing" test.
+- **Dropdown visibility:** `dropdownOpen = focused && !dismissed &&
+  items.length > 0`. `focused` is tracked via `onFocus`/`onBlur` (not
+  inferred from text) specifically to satisfy "must not appear when the
+  input is empty AND unfocused; empty-but-focused shows key-prefix
+  suggestions" — an empty token with `focused=false` yields `dropdownOpen
+  === false` even though `suggest('', ctx)` itself returns 5 items.
+  `dismissed` is a separate flag set by Esc and cleared on the next
+  keystroke or refocus, so Esc hides the list without discarding it — typing
+  further reopens it against the freshly-computed token.
+- **Esc propagation:** per the brief, the input's `onKeyDown` only calls
+  `e.stopPropagation()` in the dropdown-open branch. `SessionDetailPage`'s
+  document-level Escape handler blurs `document.activeElement`, and
+  `Shell.tsx`'s document-level Escape handler closes the cheat sheet
+  overlay — both currently fire for *every* Escape reaching `document`,
+  regardless of what's focused. Stopping propagation only when the dropdown
+  is open means: dropdown open → Esc closes it locally, input keeps focus,
+  neither document handler runs; dropdown closed → Esc is untouched and
+  bubbles exactly as before (blurs the input; Shell's handler is a no-op
+  since the cheat sheet wasn't open). Verified with a real
+  `document.addEventListener('keydown', ...)` spy in both states, and
+  confirmed `document.activeElement` stays the input in the open case (using
+  a real `.focus()` call, since RTL's `fireEvent.focus` alone doesn't move
+  jsdom's `document.activeElement`).
+- **Click-to-accept:** suggestion rows use `onMouseDown` (with
+  `preventDefault()`) rather than `onClick`, so accepting happens before the
+  input's blur would otherwise fire and collapse the dropdown out from under
+  the click.
+- **`suggestCtx` prop:** made optional (`suggestCtx?: SuggestContext`) with a
+  module-level `EMPTY_SUGGEST_CTX` fallback (stable identity, avoids
+  needlessly recomputing the `useMemo` off an inline object literal) rather
+  than required — this let the 6 pre-existing `CmdBar.test.tsx` cases (which
+  don't pass `suggestCtx`) keep working unmodified; they never focus the
+  input via a real event, so the dropdown never activates and old behavior
+  is provably unaffected (they still pass, unedited).
+- **`SessionDetailPage` ctx computation:** one reverse `for` loop over
+  `state.events` (`useMemo` on `[session, state.events]`, mirroring the
+  existing `sourcesList` memo's dependency style directly above it) builds
+  both `nsValues` (a `Set`, sorted at the end) and `traceValues` (dedup via a
+  second `Set`, iterating newest→oldest so first-seen = most recent, capped
+  by only pushing while `traceValues.length < 8`) in a single pass, per the
+  "ONE memoized pass over events" instruction. `sources` comes straight from
+  `session?.sources ?? []`, matching `sourcesList`'s own preference for the
+  session summary over events-derived data.
+- **CSS:** `.suggest-panel` is `position: absolute; top: 100%` under
+  `.cmdline` (now `position: relative`), left-aligned under the prompt/chips
+  at the bar's own `20px` padding. Highlighted row reuses the exact
+  `background: #10150f` + `box-shadow: inset 2px 0 0 var(--phos)` pattern
+  already used by `.row.selected` in the session list, so it reads as the
+  same "selected" idiom elsewhere in the app rather than inventing a new one.
 
 ## Commit
 
-`745f214` — `refactor(mcp): extract createMcpServer factory for reuse across transports`
-(no Co-Authored-By trailer, on branch `demo-serves-ui`).
+`8bbc35a` — `feat(ui): filter autocomplete dropdown` (no Co-Authored-By
+trailer, branch `feat-nav-cheatsheet-hostbind`).
 
 ## Concerns
 
-None. The refactor is mechanical and behavior-preserving; regression gate
-(6 tests) and typecheck are both green.
+- None functional. One minor design choice worth flagging for the
+  controller/reviewer: `suggest()` doesn't dedupe an already-selected
+  comma-list segment (e.g. `level:warn,w` will still offer `warn` again
+  alongside `warn` and `error`... actually only `warn` matches prefix `w`
+  among levels, so today's pools are small enough this rarely surfaces, but
+  it's a known gap vs. a "smarter" implementation) — the spec/brief didn't
+  call for exclusion, so I left it out rather than adding unrequested scope.
+- `nsValues`/`traceValues` are derived from `state.events` (currently
+  loaded/filtered events, per the spec's own documented caveat), so
+  switching to a narrower filter temporarily shrinks the ns/trace
+  suggestion pool until more events load — this is the "known caveat:
+  acceptable, documented" call already made in the spec, not something I
+  introduced.

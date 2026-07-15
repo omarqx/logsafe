@@ -14,6 +14,7 @@ import { filtersFromSearch, filtersToSearch, filtersToApiParams, toggleErrorLeve
 import { formatTs, formatDuration, parseTsMode, type TsMode } from '../lib/time'
 import { sourceColorIndex } from '../lib/sources'
 import { binEvents, minimapFractionToIndex, type MinimapBin } from '../lib/minimap'
+import type { SuggestContext } from '../lib/suggest'
 import { isModifierKeyEvent } from '../lib/keyboard'
 import { CmdBar } from '../components/CmdBar'
 import { LogRow } from '../components/LogRow'
@@ -171,6 +172,30 @@ export function SessionDetailPage() {
       }
     }
     return list
+  }, [session, state.events])
+
+  // Autocomplete context for CmdBar's dropdown (lib/suggest.ts): one
+  // memoized O(n) pass over `state.events` computes both nsValues (sorted
+  // distinct) and traceValues (distinct, most-recent-first, cap 8).
+  // `sources` comes from the session summary (authoritative), not the
+  // loaded/filtered events — same source sourcesList above prefers.
+  const suggestCtx = useMemo<SuggestContext>(() => {
+    const nsSet = new Set<string>()
+    const traceSeen = new Set<string>()
+    const traceValues: string[] = []
+    for (let i = state.events.length - 1; i >= 0; i--) {
+      const ev = state.events[i]
+      if (ev.ns) nsSet.add(ev.ns)
+      if (ev.trace && !traceSeen.has(ev.trace)) {
+        traceSeen.add(ev.trace)
+        if (traceValues.length < 8) traceValues.push(ev.trace)
+      }
+    }
+    return {
+      sources: session?.sources ?? [],
+      nsValues: Array.from(nsSet).sort(),
+      traceValues,
+    }
   }, [session, state.events])
 
   const sessionStart = session?.first_ts ?? state.events[0]?.ts ?? 0
@@ -594,6 +619,7 @@ export function SessionDetailPage() {
         tsMode={tsMode}
         onChangeTsMode={updateTsMode}
         inputRef={cmdInputRef}
+        suggestCtx={suggestCtx}
       />
 
       <PinnedStrip
