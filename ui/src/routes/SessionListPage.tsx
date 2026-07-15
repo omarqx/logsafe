@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listSessions, deleteSession, type SessionSummary } from '../api'
+import { listSessions, deleteSession, coreApi, makePluginFetch, type SessionSummary } from '../api'
 import { DefaultSessionRow } from '../components/DefaultSessionRow'
 import { isModifierKeyEvent } from '../lib/keyboard'
+import { uiPlugins } from '../plugins.generated'
+import { buildRegistry, resolveViewOwner } from '../plugins/registry'
 
 const REFRESH_MS = 5000
 const LOGSAFE_VERSION = 'v0.1.0'
+const registry = buildRegistry(uiPlugins)
 
 function isActiveElementEditable(): boolean {
   const el = document.activeElement
@@ -122,16 +125,34 @@ export function SessionListPage() {
         )}
 
         {sessions !== null &&
-          sessions.map((s) => (
-            <DefaultSessionRow
-              key={s.id}
-              session={s}
-              now={now}
-              selected={s.id === selectedId}
-              onOpen={() => navigate(`/s/${s.id}`)}
-              onSelect={() => setSelectedId(s.id)}
-            />
-          ))}
+          sessions.map((s) => {
+            const owner = resolveViewOwner(s, registry)
+            if (owner?.ListRow) {
+              const Row = owner.ListRow
+              return (
+                <Row
+                  key={s.id}
+                  session={s}
+                  now={now}
+                  selected={s.id === selectedId}
+                  onOpen={() => navigate(`/s/${s.id}`)}
+                  onSelect={() => setSelectedId(s.id)}
+                  api={coreApi}
+                  pluginFetch={makePluginFetch(owner.type)}
+                />
+              )
+            }
+            return (
+              <DefaultSessionRow
+                key={s.id}
+                session={s}
+                now={now}
+                selected={s.id === selectedId}
+                onOpen={() => navigate(`/s/${s.id}`)}
+                onSelect={() => setSelectedId(s.id)}
+              />
+            )
+          })}
       </div>
 
       <footer>
