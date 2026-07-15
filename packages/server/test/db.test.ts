@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { openDb } from '../src/db.js'
+import { openDb, migrateSchema } from '../src/db.js'
+import Database from 'better-sqlite3'
 import os from 'node:os'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -27,5 +28,27 @@ describe('openDb', () => {
     const row = again.prepare('SELECT id FROM sessions').get() as { id: string }
     expect(row.id).toBe('s')
     again.close()
+  })
+})
+
+describe('schema: plugin type columns', () => {
+  it('adds type to events and types to sessions with defaults', () => {
+    const db = openDb(':memory:')
+    const eventCols = (db.prepare(`PRAGMA table_info(events)`).all() as { name: string; dflt_value: string }[])
+    const typeCol = eventCols.find((c) => c.name === 'type')
+    expect(typeCol).toBeTruthy()
+    const sessionCols = (db.prepare(`PRAGMA table_info(sessions)`).all() as { name: string }[])
+    expect(sessionCols.some((c) => c.name === 'types')).toBe(true)
+  })
+
+  it('upgrades a pre-existing db that lacks the columns', () => {
+    const db = new Database(':memory:')
+    db.exec(`CREATE TABLE events (seq INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, ts INTEGER NOT NULL, received_at INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'default', ns TEXT NOT NULL DEFAULT '', level TEXT NOT NULL, msg TEXT NOT NULL, ctx TEXT, trace TEXT);
+      CREATE TABLE sessions (id TEXT PRIMARY KEY, label TEXT, first_ts INTEGER NOT NULL, last_ts INTEGER NOT NULL, event_count INTEGER NOT NULL DEFAULT 0, error_count INTEGER NOT NULL DEFAULT 0, warn_count INTEGER NOT NULL DEFAULT 0, sources TEXT NOT NULL DEFAULT '[]');
+      INSERT INTO sessions (id, first_ts, last_ts) VALUES ('old', 1, 1);`)
+    // Re-run migrations against the same file handle as openDb would.
+    migrateSchema(db)
+    const row = db.prepare(`SELECT types FROM sessions WHERE id = 'old'`).get() as { types: string }
+    expect(row.types).toBe('[]')
   })
 })
