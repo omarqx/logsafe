@@ -63,7 +63,7 @@ describe('CmdBar', () => {
     expect(screen.getByText(/trace:req-1/)).toBeTruthy()
   })
 
-  it('removes a filter when its chip × is clicked', () => {
+  it('removes a filter when its chip x is clicked', () => {
     const onChangeFilters = vi.fn()
     render(
       <CmdBar
@@ -195,7 +195,7 @@ describe('CmdBar', () => {
       const docHandler = vi.fn()
       document.addEventListener('keydown', docHandler)
       try {
-        // fireEvent.focus alone doesn't move jsdom's document.activeElement
+        // fireEvent.focus alone does not move jsdom's document.activeElement
         // (unlike a real browser focus) — call .focus() for that, then
         // fireEvent.focus so React's synthetic onFocus handler definitely runs.
         input.focus()
@@ -210,7 +210,7 @@ describe('CmdBar', () => {
       }
     })
 
-    it('Esc with the dropdown already closed lets the keydown reach the document (today’s blur behavior)', () => {
+    it("Esc with the dropdown already closed lets the keydown reach the document (today's blur behavior)", () => {
       render(
         <CmdBar filters={{}} onChangeFilters={() => {}} tsMode="rel" onChangeTsMode={() => {}} suggestCtx={suggestCtx} />,
       )
@@ -224,6 +224,44 @@ describe('CmdBar', () => {
       } finally {
         document.removeEventListener('keydown', docHandler)
       }
+    })
+
+    it('handles suggestion list shrinking while a row is highlighted (highlight clamp)', () => {
+      const largeCtx = { sources: ['api', 'web'], nsValues: ['auth.login', 'auth.logout', 'auth.refresh'], traceValues: ['t-1', 't-2', 't-3'] }
+      const smallCtx = { sources: ['api'], nsValues: [], traceValues: ['t-1'] }
+
+      const { rerender } = render(
+        <CmdBar filters={{}} onChangeFilters={() => {}} tsMode="rel" onChangeTsMode={() => {}} suggestCtx={largeCtx} />,
+      )
+      const input = screen.getByLabelText('filter or search') as HTMLInputElement
+
+      // Focus and type to show trace suggestions
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'trace:' } })
+      expect(screen.getAllByRole('option')).toHaveLength(3)
+
+      // Highlight the last item (index 2)
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+
+      // Verify last row is highlighted
+      const options = screen.getAllByRole('option')
+      expect(options[2].className).toContain('highlight')
+
+      // Shrink the suggestion list to 1 item (simulating live tail eviction)
+      rerender(
+        <CmdBar filters={{}} onChangeFilters={() => {}} tsMode="rel" onChangeTsMode={() => {}} suggestCtx={smallCtx} />,
+      )
+
+      // Should have exactly 1 suggestion now
+      expect(screen.getAllByRole('option')).toHaveLength(1)
+
+      // Press Enter - should accept the single remaining suggestion without throwing
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      // The single suggestion should be accepted
+      expect(input.value).toContain('trace:')
     })
   })
 })

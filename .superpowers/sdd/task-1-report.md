@@ -124,3 +124,11 @@ trailer, branch `feat-nav-cheatsheet-hostbind`).
   suggestion pool until more events load — this is the "known caveat:
   acceptable, documented" call already made in the spec, not something I
   introduced.
+
+## Fix: highlight clamp
+
+Fixed a bug where the `highlight` state index could reference undefined items when the suggestions list shrinks reactively (live SSE tail evicts old trace IDs from the cap-8 pool). The fix introduces `effectiveHighlight = highlight === null ? null : items.length === 0 ? null : Math.min(highlight, items.length - 1)`, used for: (1) the accept path (Enter/Tab) to safely dereference `items[effectiveHighlight]`, (2) the rendered `.highlight` class on dropdown rows, and (3) ArrowDown/Up handlers to clamp the starting position before computing the next index.
+
+Added test in `ui/src/test/CmdBar.test.tsx`: render with 3 trace suggestions, press ArrowDown 3 times to highlight index 2, rerender with 1 suggestion, press Enter → accepts the single suggestion without throwing.
+
+`npm test` → 28 files, 258/258 passed. `npm run typecheck` → clean, exit 0.

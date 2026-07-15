@@ -58,6 +58,10 @@ export function CmdBar({ filters, onChangeFilters, tsMode, onChangeTsMode, input
   // empty-and-unfocused must never show anything.
   const dropdownOpen = focused && !dismissed && items.length > 0
 
+  // items can shrink reactively (live tail evicts old trace ids from the
+  // suggestion pool) while a row is highlighted — clamp before deref.
+  const effectiveHighlight = highlight === null ? null : items.length === 0 ? null : Math.min(highlight, items.length - 1)
+
   const removeFilter = useCallback(
     (key: keyof Filters) => {
       onChangeFilters({ ...filters, [key]: undefined })
@@ -100,17 +104,23 @@ export function CmdBar({ filters, onChangeFilters, tsMode, onChangeTsMode, input
     (e: KeyboardEvent<HTMLInputElement>) => {
       if (dropdownOpen && e.key === 'ArrowDown') {
         e.preventDefault()
-        setHighlight((h) => (h === null ? 0 : (h + 1) % items.length))
+        setHighlight((h) => {
+          const clamped = h === null ? null : items.length === 0 ? null : Math.min(h, items.length - 1)
+          return clamped === null ? 0 : (clamped + 1) % Math.max(items.length, 1)
+        })
         return
       }
       if (dropdownOpen && e.key === 'ArrowUp') {
         e.preventDefault()
-        setHighlight((h) => (h === null ? items.length - 1 : (h - 1 + items.length) % items.length))
+        setHighlight((h) => {
+          const clamped = h === null ? null : items.length === 0 ? null : Math.min(h, items.length - 1)
+          return clamped === null ? items.length - 1 : (clamped - 1 + items.length) % Math.max(items.length, 1)
+        })
         return
       }
-      if (dropdownOpen && highlight !== null && (e.key === 'Tab' || e.key === 'Enter')) {
+      if (dropdownOpen && effectiveHighlight !== null && (e.key === 'Tab' || e.key === 'Enter')) {
         e.preventDefault()
-        acceptSuggestion(items[highlight])
+        acceptSuggestion(items[effectiveHighlight])
         return
       }
       if (e.key === 'Escape') {
@@ -209,8 +219,8 @@ export function CmdBar({ filters, onChangeFilters, tsMode, onChangeTsMode, input
             <div
               key={item.insert}
               role="option"
-              aria-selected={i === highlight}
-              className={`suggest-row${i === highlight ? ' highlight' : ''}`}
+              aria-selected={i === effectiveHighlight}
+              className={`suggest-row${i === effectiveHighlight ? ' highlight' : ''}`}
               // onMouseDown (not onClick) fires before the input's blur, so
               // clicking a suggestion accepts it instead of just closing the
               // dropdown via loss of focus first.
