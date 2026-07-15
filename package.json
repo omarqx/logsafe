@@ -12,7 +12,8 @@
     "test": "vitest run",
     "typecheck": "tsc -p packages/server && tsc -p packages/client --noEmit && tsc -p ui --noEmit && tsc -p packages/plugin-sdk --noEmit",
     "dev:ui": "npm run dev --workspace=ui",
-    "build:ui": "npm run build --workspace=ui"
+    "plugins:sync": "node scripts/plugins-sync.mjs",
+    "build:ui": "npm run plugins:sync && npm run build --workspace=ui"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
