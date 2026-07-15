@@ -37,8 +37,11 @@ describe('schema: plugin type columns', () => {
     const eventCols = (db.prepare(`PRAGMA table_info(events)`).all() as { name: string; dflt_value: string }[])
     const typeCol = eventCols.find((c) => c.name === 'type')
     expect(typeCol).toBeTruthy()
-    const sessionCols = (db.prepare(`PRAGMA table_info(sessions)`).all() as { name: string }[])
-    expect(sessionCols.some((c) => c.name === 'types')).toBe(true)
+    expect(typeCol?.dflt_value).toBe("'generic'")
+    const sessionCols = (db.prepare(`PRAGMA table_info(sessions)`).all() as { name: string; dflt_value: string }[])
+    const typesCol = sessionCols.find((c) => c.name === 'types')
+    expect(typesCol).toBeTruthy()
+    expect(typesCol?.dflt_value).toBe("'[]'")
   })
 
   it('upgrades a pre-existing db that lacks the columns', () => {
@@ -46,7 +49,7 @@ describe('schema: plugin type columns', () => {
     db.exec(`CREATE TABLE events (seq INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, ts INTEGER NOT NULL, received_at INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'default', ns TEXT NOT NULL DEFAULT '', level TEXT NOT NULL, msg TEXT NOT NULL, ctx TEXT, trace TEXT);
       CREATE TABLE sessions (id TEXT PRIMARY KEY, label TEXT, first_ts INTEGER NOT NULL, last_ts INTEGER NOT NULL, event_count INTEGER NOT NULL DEFAULT 0, error_count INTEGER NOT NULL DEFAULT 0, warn_count INTEGER NOT NULL DEFAULT 0, sources TEXT NOT NULL DEFAULT '[]');
       INSERT INTO sessions (id, first_ts, last_ts) VALUES ('old', 1, 1);`)
-    // Re-run migrations against the same file handle as openDb would.
+    // Upgrade a legacy db that predates the type/types columns by calling migrateSchema directly.
     migrateSchema(db)
     const row = db.prepare(`SELECT types FROM sessions WHERE id = 'old'`).get() as { types: string }
     expect(row.types).toBe('[]')
