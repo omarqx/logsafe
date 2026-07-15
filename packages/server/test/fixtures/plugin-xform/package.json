@@ -1,0 +1,6 @@
+{
+  "name": "plugin-xform",
+  "version": "0.0.1",
+  "type": "module",
+  "logsafe": { "id": "xform", "apiVersion": "1", "ownedTypes": ["xform"], "priority": 7, "server": "./server.js" }
+}

@@ -27,4 +27,27 @@ describe('ingest pipeline with plugins', () => {
     expect(marks.c).toBe(1) // afterInsert only received the 'foo'-typed event
     await app.close()
   })
+
+  it('exercises transform hook with ctx JSON round-trip', async () => {
+    const db = openDb(':memory:')
+    const plugins = await loadServerPlugins(db, ['./plugin-xform'], FIX)
+    const app = buildApp({ db, plugins })
+
+    const res = await app.inject({
+      method: 'POST', url: '/v1/log',
+      payload: [{ msg: 'x', session_id: 's1', source: 'xform', ns: 'orig', ctx: { a: 1 } }],
+    })
+    expect(res.statusCode).toBe(202)
+
+    const events = await app.inject({ method: 'GET', url: '/api/sessions/s1/events' })
+    const eventList = events.json().events as { type: string; ns: string; ctx: Record<string, unknown> }[]
+    expect(eventList).toHaveLength(1)
+    const event = eventList[0]
+
+    expect(event.type).toBe('xform')              // matched by transform plugin
+    expect(event.ns).toBe('xform:normalized')     // transform rewrote ns
+    expect(event.ctx).toEqual({ a: 1, enriched: true })  // ctx was parsed, merged, and re-serialized correctly
+
+    await app.close()
+  })
 })
