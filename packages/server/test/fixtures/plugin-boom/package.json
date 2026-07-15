@@ -1,0 +1,9 @@
+{
+  "name": "plugin-boom",
+  "version": "0.0.1",
+  "type": "module",
+  "logsafe": {
+    "id": "boom", "apiVersion": "1", "ownedTypes": ["boom"], "priority": 5,
+    "server": "./server.js"
+  }
+}

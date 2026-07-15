@@ -1,0 +1,8 @@
+{
+  "name": "plugin-noapi",
+  "version": "0.0.1",
+  "type": "module",
+  "logsafe": {
+    "id": "noapi", "ownedTypes": [], "server": "./server.js"
+  }
+}

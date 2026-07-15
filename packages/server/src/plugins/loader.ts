@@ -41,8 +41,8 @@ export async function loadServerPlugins(
       continue
     }
     const manifest = pkg.logsafe as PluginManifest | undefined
-    if (!manifest?.id) {
-      console.warn(`[logsafe] plugin "${specifier}" has no "logsafe" manifest; skipping`)
+    if (!manifest?.id || !manifest.apiVersion) {
+      console.warn(`[logsafe] plugin "${specifier}" has no valid "logsafe" manifest (missing id or apiVersion); skipping`)
       continue
     }
     if (major(manifest.apiVersion) !== major(accept)) {
@@ -51,17 +51,22 @@ export async function loadServerPlugins(
     }
     if (!manifest.server) continue // ui-only plugin: nothing to load server-side
 
-    const entryUrl = pathToFileURL(path.resolve(dir, manifest.server)).href
-    const mod = (await import(entryUrl)) as { default?: ServerPlugin }
-    const plugin = mod.default
-    if (!plugin) {
-      console.warn(`[logsafe] plugin "${manifest.id}" server entry has no default export; skipping`)
+    try {
+      const entryUrl = pathToFileURL(path.resolve(dir, manifest.server)).href
+      const mod = (await import(entryUrl)) as { default?: ServerPlugin }
+      const plugin = mod.default
+      if (!plugin) {
+        console.warn(`[logsafe] plugin "${manifest.id}" server entry has no default export; skipping`)
+        continue
+      }
+      const ctx = makePluginContext(db, manifest.id)
+      plugin.migrate?.(ctx)
+      await plugin.setup?.(ctx)
+      loaded.push({ manifest, plugin, ctx, _order: i })
+    } catch (err) {
+      console.warn(`[logsafe] plugin "${manifest.id}" failed to load: ${(err as Error).message}; skipping`)
       continue
     }
-    const ctx = makePluginContext(db, manifest.id)
-    plugin.migrate?.(ctx)
-    await plugin.setup?.(ctx)
-    loaded.push({ manifest, plugin, ctx, _order: i })
   }
 
   loaded.sort((a, b) => (b.manifest.priority ?? 0) - (a.manifest.priority ?? 0) || a._order - b._order)

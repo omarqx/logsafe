@@ -22,4 +22,17 @@ describe('plugin loader', () => {
     const loaded = await loadServerPlugins(db, ['./plugin-foo'], FIX, { apiVersion: '2' })
     expect(loaded).toHaveLength(0)
   })
+
+  it('skips a plugin whose migrate throws, without aborting later plugins', async () => {
+    const db = openDb(':memory:')
+    const loaded = await loadServerPlugins(db, ['./plugin-boom', './plugin-foo'], FIX)
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0].manifest.id).toBe('foo')
+  })
+
+  it('skips a plugin whose manifest is missing apiVersion', async () => {
+    const db = openDb(':memory:')
+    const loaded = await loadServerPlugins(db, ['./plugin-noapi'], FIX)
+    expect(loaded).toHaveLength(0)
+  })
 })
