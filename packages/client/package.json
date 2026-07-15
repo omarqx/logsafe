@@ -1,5 +1,5 @@
 {
-  "name": "logsafe-client",
+  "name": "@coglet/logsafe-client",
   "version": "0.2.0",
   "description": "Zero-dependency logging client for logsafe: batched HTTP delivery, sendBeacon unload flush, never throws into the host app.",
   "keywords": ["logging", "logsafe", "debugging"],

@@ -1,4 +1,4 @@
-# logsafe-client
+# @coglet/logsafe-client
 
 Zero-dependency logging client for [logsafe](https://github.com/omarqx/logsafe):
 batched HTTP delivery, `sendBeacon` unload flush, never throws into the host
@@ -7,13 +7,13 @@ app.
 ## Install
 
 ```bash
-npm i logsafe-client
+npm i @coglet/logsafe-client
 ```
 
 ## Usage
 
 ```ts
-import { initLogsafe, createLog } from 'logsafe-client'
+import { initLogsafe, createLog } from '@coglet/logsafe-client'
 
 const { sessionId } = initLogsafe({
   source: 'webapp',              // required: identifies this process/app
@@ -41,7 +41,7 @@ This client needs a logsafe server to send events to. The server is the
 `logsafe` package:
 
 ```bash
-npx logsafe
+npx @coglet/logsafe
 ```
 
 ## Docs
