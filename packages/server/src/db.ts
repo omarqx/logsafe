@@ -32,7 +32,6 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_session_ns    ON events(session_id, ns);
 CREATE INDEX IF NOT EXISTS idx_events_session_level ON events(session_id, level);
 CREATE INDEX IF NOT EXISTS idx_events_session_ts    ON events(session_id, ts);
-CREATE INDEX IF NOT EXISTS idx_events_session_type  ON events(session_id, type);
 `
 
 function hasColumn(db: Db, table: string, column: string): boolean {
