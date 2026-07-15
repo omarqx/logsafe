@@ -106,7 +106,7 @@ Final run: `npx vitest run ui/src/test/suggest.test.ts ui/src/test/CmdBar.test.t
 
 ## Commit
 
-`8bbc35a` — `feat(ui): filter autocomplete dropdown` (no Co-Authored-By
+`dc45d7c` — `feat(ui): filter autocomplete dropdown` (no Co-Authored-By
 trailer, branch `feat-nav-cheatsheet-hostbind`).
 
 ## Concerns
