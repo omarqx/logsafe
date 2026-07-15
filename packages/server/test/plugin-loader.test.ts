@@ -35,4 +35,11 @@ describe('plugin loader', () => {
     const loaded = await loadServerPlugins(db, ['./plugin-noapi'], FIX)
     expect(loaded).toHaveLength(0)
   })
+
+  it('skips a duplicate plugin id loaded from a second specifier', async () => {
+    const db = openDb(':memory:')
+    const loaded = await loadServerPlugins(db, ['./plugin-foo', './plugin-foo'], FIX)
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0].manifest.id).toBe('foo')
+  })
 })

@@ -19,15 +19,20 @@ function readConfig() {
 const require = createRequire(path.join(root, 'noop.js'))
 const entries = []
 for (const spec of readConfig()) {
-  let pkg
-  try { pkg = require(`${spec}/package.json`) } catch { console.warn(`[plugins-sync] cannot resolve ${spec}; skipping`); continue }
+  let pkgJsonPath, pkg
+  try {
+    pkgJsonPath = require.resolve(`${spec}/package.json`)
+    pkg = require(`${spec}/package.json`)
+  } catch { console.warn(`[plugins-sync] cannot resolve ${spec}; skipping`); continue }
   const m = pkg.logsafe
   if (!m?.id || !m.ui) continue // ui-only relevance: no ui entry → nothing to import
-  entries.push({ id: m.id, priority: m.priority ?? 0, spec })
+  const pkgDir = path.dirname(pkgJsonPath)
+  const uiPath = path.resolve(pkgDir, m.ui)
+  entries.push({ id: m.id, priority: m.priority ?? 0, uiPath })
 }
 entries.sort((a, b) => b.priority - a.priority)
 
-const imports = entries.map((e, i) => `import p${i} from '${e.spec}/ui'`).join('\n')
+const imports = entries.map((e, i) => `import p${i} from '${e.uiPath}'`).join('\n')
 const list = entries.map((_, i) => `p${i}`).join(', ')
 
 const lines = [

@@ -3,8 +3,13 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Db } from '../db.js'
 import type { ServerPlugin, PluginManifest, ServerPluginContext } from '@coglet/logsafe-plugin-sdk/server'
-import { PLUGIN_API_VERSION } from '@coglet/logsafe-plugin-sdk/server'
 import { makePluginContext } from './context.js'
+
+// The plugin-contract major this core implements. Kept in sync with the
+// plugin SDK's PLUGIN_API_VERSION; inlined so the published server has no
+// runtime dependency on the (source-only) SDK package — plugins bring it in
+// as a peer dependency instead.
+const PLUGIN_API_VERSION = '1'
 
 export interface LoadedServerPlugin {
   manifest: PluginManifest
@@ -30,6 +35,7 @@ export async function loadServerPlugins(
 ): Promise<LoadedServerPlugin[]> {
   const accept = opts.apiVersion ?? PLUGIN_API_VERSION
   const loaded: (LoadedServerPlugin & { _order: number })[] = []
+  const seenIds = new Set<string>()
 
   for (let i = 0; i < specifiers.length; i++) {
     const specifier = specifiers[i]
@@ -49,6 +55,12 @@ export async function loadServerPlugins(
       console.warn(`[logsafe] plugin "${manifest.id}" targets apiVersion ${manifest.apiVersion}, core is ${accept}; skipping`)
       continue
     }
+    if (seenIds.has(manifest.id)) {
+      console.warn(`[logsafe] plugin "${manifest.id}" already loaded from an earlier specifier; skipping duplicate`)
+      continue
+    }
+    seenIds.add(manifest.id)
+
     if (!manifest.server) continue // ui-only plugin: nothing to load server-side
 
     try {

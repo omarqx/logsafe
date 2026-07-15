@@ -24,6 +24,9 @@ describe('plugins-sync codegen', () => {
     // The script resolves specifiers via createRequire from repo root, so an
     // absolute path to a real plugin package (examples/plugin-hello) resolves
     // directly — proving the codegen's non-empty, multi-plugin path works.
+    // The emitted import must be the resolved ABSOLUTE ui-entry path (not the
+    // spec + '/ui' verbatim) so that relative config specifiers also resolve
+    // correctly under vite build.
     const helloSpec = path.join(repoRoot, 'examples', 'plugin-hello')
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lsync-'))
     fs.writeFileSync(path.join(dir, 'logsafe.config.json'), JSON.stringify({ plugins: [helloSpec] }))
@@ -32,7 +35,8 @@ describe('plugins-sync codegen', () => {
       env: { ...process.env, LOGSAFE_CONFIG: path.join(dir, 'logsafe.config.json'), LOGSAFE_UI_OUT: out },
     })
     const text = fs.readFileSync(out, 'utf8')
-    const importLine = `import p0 from '${helloSpec}/ui'`
+    const expectedUiPath = path.join(helloSpec, 'ui.tsx')
+    const importLine = `import p0 from '${expectedUiPath}'`
     expect(text).toContain(importLine)
     expect(text).toMatch(/export const uiPlugins: UIPlugin\[\] = \[p0\]/)
   })
