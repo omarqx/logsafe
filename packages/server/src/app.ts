@@ -6,6 +6,8 @@ import { normalizeEvent, type NormalizedEvent } from './normalize.js'
 import { insertBatch, type StoredEvent } from './ingest.js'
 import { queryEvents, listSessions, getSession, deleteSession, type EventFilters } from './queries.js'
 import { SseHub } from './sse.js'
+import type { LoadedServerPlugin } from './plugins/loader.js'
+import { classifyAndTransform, runAfterInsert } from './plugins/pipeline.js'
 
 export const MAX_BATCH = 1000
 export const BODY_LIMIT = 5 * 1024 * 1024
@@ -13,6 +15,7 @@ export const BODY_LIMIT = 5 * 1024 * 1024
 export interface AppOptions {
   db: Db
   now?: () => number
+  plugins?: LoadedServerPlugin[]
 }
 
 function num(v: unknown): number | undefined {
@@ -40,7 +43,7 @@ function parseFilters(q: Record<string, unknown>): EventFilters {
   }
 }
 
-export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
+export function buildApp({ db, now = Date.now, plugins = [] }: AppOptions): FastifyInstance {
   const app = Fastify({ bodyLimit: BODY_LIMIT })
 
   app.register(cors, { origin: true })
@@ -85,9 +88,10 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
       const good: NormalizedEvent[] = []
       for (const raw of body) {
         const ev = normalizeEvent(raw, t)
-        if (ev) good.push(ev)
+        if (ev) good.push(classifyAndTransform(ev, raw as Record<string, unknown>, plugins))
       }
       const stored = insertBatch(db, good)
+      runAfterInsert(stored, plugins)
       afterInsert(stored)
       return reply.code(202).send({ accepted: good.length, rejected: body.length - good.length })
     }
@@ -95,7 +99,9 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     if (!ev) {
       return reply.code(400).send({ error: 'event must be an object with a non-empty string msg' })
     }
-    const stored = insertBatch(db, [ev])
+    const classified = classifyAndTransform(ev, body as Record<string, unknown>, plugins)
+    const stored = insertBatch(db, [classified])
+    runAfterInsert(stored, plugins)
     afterInsert(stored)
     return reply.code(202).send({ accepted: 1, rejected: 0 })
   })
