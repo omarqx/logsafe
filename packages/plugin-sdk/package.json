@@ -1,0 +1,20 @@
+{
+  "name": "@coglet/logsafe-plugin-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Types and runtime helpers for building logsafe plugins.",
+  "exports": {
+    "./server": { "types": "./src/server.ts", "default": "./src/server.ts" },
+    "./ui": { "types": "./src/ui.tsx", "default": "./src/ui.tsx" }
+  },
+  "peerDependencies": { "react": "^19" },
+  "peerDependenciesMeta": { "react": { "optional": true } },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.17",
+    "jsdom": "^29.1.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}
