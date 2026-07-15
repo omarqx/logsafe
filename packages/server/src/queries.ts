@@ -166,3 +166,60 @@ export function deleteSession(db: Db, id: string): boolean {
   })
   return run(id)
 }
+
+interface SurvivorAgg {
+  cnt: number
+  min_ts: number | null
+  max_ts: number | null
+  errors: number | null
+  warns: number | null
+}
+
+/** Delete events with seq <= throughSeq and recompute the session's
+    aggregates (event_count/error_count/warn_count/first_ts/last_ts/sources)
+    from the survivors, in one transaction. If no events survive, the
+    session row is deleted too (first_ts/last_ts are NOT NULL, so a
+    zero-event session isn't representable). `label` is left untouched. */
+export function purgeEventsThrough(
+  db: Db,
+  sessionId: string,
+  throughSeq: number,
+): { deleted: number; sessionDeleted: boolean } {
+  const run = db.transaction(
+    (sid: string, seq: number): { deleted: number; sessionDeleted: boolean } => {
+      const delRes = db.prepare('DELETE FROM events WHERE session_id = ? AND seq <= ?').run(sid, seq)
+      const deleted = delRes.changes
+
+      const agg = db
+        .prepare(
+          `SELECT count(*) AS cnt, min(ts) AS min_ts, max(ts) AS max_ts,
+                  sum(level = 'error') AS errors, sum(level = 'warn') AS warns
+           FROM events WHERE session_id = ?`,
+        )
+        .get(sid) as SurvivorAgg
+
+      if (agg.cnt === 0) {
+        db.prepare('DELETE FROM sessions WHERE id = ?').run(sid)
+        return { deleted, sessionDeleted: true }
+      }
+
+      const sourceRows = db
+        .prepare('SELECT DISTINCT source FROM events WHERE session_id = ? ORDER BY source')
+        .all(sid) as { source: string }[]
+
+      db.prepare(
+        `UPDATE sessions SET
+           first_ts = ?,
+           last_ts = ?,
+           event_count = ?,
+           error_count = ?,
+           warn_count = ?,
+           sources = ?
+         WHERE id = ?`,
+      ).run(agg.min_ts, agg.max_ts, agg.cnt, agg.errors, agg.warns, JSON.stringify(sourceRows.map((r) => r.source)), sid)
+
+      return { deleted, sessionDeleted: false }
+    },
+  )
+  return run(sessionId, throughSeq)
+}

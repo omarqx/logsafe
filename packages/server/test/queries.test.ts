@@ -2,7 +2,15 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { openDb, type Db } from '../src/db.js'
 import { normalizeEvent } from '../src/normalize.js'
 import { insertBatch } from '../src/ingest.js'
-import { nsToGlob, queryEvents, listSessions, getSession, deleteSession, ACTIVE_WINDOW_MS } from '../src/queries.js'
+import {
+  nsToGlob,
+  queryEvents,
+  listSessions,
+  getSession,
+  deleteSession,
+  purgeEventsThrough,
+  ACTIVE_WINDOW_MS,
+} from '../src/queries.js'
 
 const NOW = Date.UTC(2026, 6, 13, 12, 0, 0)
 
@@ -120,5 +128,68 @@ describe('sessions', () => {
     expect(listSessions(db, 50, -5, NOW)).toHaveLength(2)
     expect(listSessions(db, 2.5, 0, NOW)).toHaveLength(2)   // fractional must not throw
     expect(listSessions(db, 50, 0.5, NOW)).toHaveLength(2)
+  })
+})
+
+describe('purgeEventsThrough', () => {
+  // s1 fixture (from top-level beforeEach), seq ASC:
+  //   1 debug api    ts1000
+  //   2 error api    ts2000
+  //   3 warn  webapp ts3000
+  //   4 info  webapp ts4000
+  //   5 info  webapp ts5000
+  beforeEach(() => {
+    insertBatch(db, [normalizeEvent({ msg: 's2 event', session_id: 's2', source: 'other', level: 'error', ts: 9000 }, NOW)!])
+  })
+
+  it('boundary: deletes seq <= N only, recomputes counters/ts/sources from survivors', () => {
+    const result = purgeEventsThrough(db, 's1', 3)
+    expect(result).toEqual({ deleted: 3, sessionDeleted: false })
+
+    const remaining = queryEvents(db, 's1', {}).events
+    expect(remaining.map((e) => e.seq)).toEqual([4, 5])
+
+    const session = getSession(db, 's1', NOW)!
+    expect(session.event_count).toBe(2)
+    expect(session.error_count).toBe(0)
+    expect(session.warn_count).toBe(0)
+    expect(session.first_ts).toBe(4000)
+    expect(session.last_ts).toBe(5000)
+    expect(session.sources).toEqual(['webapp'])
+  })
+
+  it('all-purged: deletes the session row too', () => {
+    const result = purgeEventsThrough(db, 's1', 5)
+    expect(result).toEqual({ deleted: 5, sessionDeleted: true })
+    expect(getSession(db, 's1', NOW)).toBeNull()
+    const c = db.prepare(`SELECT count(*) AS c FROM events WHERE session_id = 's1'`).get() as { c: number }
+    expect(c.c).toBe(0)
+  })
+
+  it('through_seq above the max seq also purges everything (session gone)', () => {
+    const result = purgeEventsThrough(db, 's1', 999)
+    expect(result).toEqual({ deleted: 5, sessionDeleted: true })
+    expect(getSession(db, 's1', NOW)).toBeNull()
+  })
+
+  it('through_seq below the min seq deletes nothing, session unchanged', () => {
+    const before = getSession(db, 's1', NOW)!
+    const result = purgeEventsThrough(db, 's1', 0)
+    expect(result).toEqual({ deleted: 0, sessionDeleted: false })
+    expect(getSession(db, 's1', NOW)).toEqual(before)
+    expect(queryEvents(db, 's1', {}).events).toHaveLength(5)
+  })
+
+  it('other sessions are completely untouched', () => {
+    const s2Before = getSession(db, 's2', NOW)!
+    purgeEventsThrough(db, 's1', 5)
+    expect(getSession(db, 's2', NOW)).toEqual(s2Before)
+    expect(queryEvents(db, 's2', {}).events).toHaveLength(1)
+  })
+
+  it('label is preserved through a partial purge', () => {
+    insertBatch(db, [normalizeEvent({ msg: 'labeled', session_id: 's1', session_label: 'demo run', ts: 6000 }, NOW)!])
+    purgeEventsThrough(db, 's1', 3)
+    expect(getSession(db, 's1', NOW)!.label).toBe('demo run')
   })
 })
