@@ -19,6 +19,7 @@ function makeEvent(overrides: Partial<StoredEvent> = {}): StoredEvent {
     msg: 'upstream 502 from stripe',
     ctx: { attempt: 1, latency_ms: 3021 },
     trace: 'req-mrk8ms-pay',
+    type: 'log',
     ...overrides,
   }
 }

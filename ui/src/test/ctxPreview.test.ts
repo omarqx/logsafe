@@ -14,6 +14,7 @@ function makeEvent(ctx: unknown): StoredEvent {
     msg: 'x',
     ctx,
     trace: null,
+    type: 'log',
   }
 }
 

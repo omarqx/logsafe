@@ -13,6 +13,7 @@ export interface SessionSummary {
   error_count: number
   warn_count: number
   sources: string[]
+  types: string[]
 }
 
 export interface StoredEvent {
@@ -26,6 +27,7 @@ export interface StoredEvent {
   msg: string
   ctx: unknown
   trace: string | null
+  type: string
 }
 
 export interface EventsPage {
@@ -76,3 +78,22 @@ export async function fetchEventsPage(
   await assertOk(res, 'fetchEventsPage')
   return res.json() as Promise<EventsPage>
 }
+
+export function exportUrl(id: string, params: URLSearchParams): string {
+  const qs = params.toString()
+  return `/api/sessions/${encodeURIComponent(id)}/export.ndjson${qs ? `?${qs}` : ''}`
+}
+
+export type PluginFetch = <T = unknown>(path: string, init?: RequestInit) => Promise<T>
+
+/** Scoped fetch to /api/plugins/<id>/… returning parsed JSON. */
+export function makePluginFetch(pluginId: string): PluginFetch {
+  return async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
+    const res = await fetch(`/api/plugins/${pluginId}${path}`, init)
+    await assertOk(res, `plugin ${pluginId} fetch ${path}`)
+    return res.json() as Promise<T>
+  }
+}
+
+/** The core query client, bundled for the plugin runtime context. */
+export const coreApi = { fetchEventsPage, getSession, exportUrl }

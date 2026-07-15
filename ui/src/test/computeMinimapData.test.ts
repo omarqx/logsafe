@@ -22,6 +22,7 @@ function errorEvent(seq: number, ts: number): StoredEvent {
     msg: `attempt ${seq} failed`,
     ctx: null,
     trace: null,
+    type: 'log',
   }
 }
 

@@ -29,6 +29,7 @@ function session(overrides: Partial<SessionSummary> = {}): SessionSummary {
     error_count: 0,
     warn_count: 0,
     sources: ['webapp'],
+    types: [],
     ...overrides,
   }
 }
