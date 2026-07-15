@@ -8,6 +8,7 @@ import { queryEvents, listSessions, getSession, deleteSession, type EventFilters
 import { SseHub } from './sse.js'
 import type { LoadedServerPlugin } from './plugins/loader.js'
 import { classifyAndTransform, runAfterInsert } from './plugins/pipeline.js'
+import { mountPluginRoutes } from './plugins/router.js'
 
 export const MAX_BATCH = 1000
 export const BODY_LIMIT = 5 * 1024 * 1024
@@ -253,5 +254,6 @@ export function buildApp({ db, now = Date.now, plugins = [] }: AppOptions): Fast
     pending.length = 0
   })
 
+  mountPluginRoutes(app, plugins)
   return app
 }
