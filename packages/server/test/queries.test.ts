@@ -46,6 +46,12 @@ describe('queryEvents', () => {
     expect(queryEvents(db, 's1', { ns: 'auth:*', level: 'error' }).events).toHaveLength(1)
   })
 
+  it('filters events by type', () => {
+    const db = openDb(':memory:')
+    insertBatch(db, [normalizeEvent({ msg: 'a', session_id: 's', type: 'psdk' }, 1)!, normalizeEvent({ msg: 'b', session_id: 's' }, 1)!])
+    expect(queryEvents(db, 's', { type: 'generic' }).events.map((e) => e.msg)).toEqual(['b'])
+  })
+
   it('trace exact match', () => {
     const { events } = queryEvents(db, 's1', { trace: 't-1' })
     expect(events.map((e) => e.msg)).toEqual(['login failed', 'retry login'])

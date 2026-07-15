@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-// Covers the minimap error-mark dedup fix in SessionDetailPage.tsx:
+// Covers the minimap error-mark dedup fix in components/FlatLogView.tsx:
 // computeMinimapData quantizes each error mark's `top` position to a 0.25%
 // slot (400 slots across the strip) and keeps only the first (earliest
 // seq) mark per slot, so an error storm renders a bounded number of DOM
 // nodes instead of one per error event. binEvents itself (lib/minimap.ts)
 // is unchanged and stays covered by minimap.test.ts — this only exercises
-// the page's wrapper.
+// the flat-view's wrapper.
 import { describe, it, expect } from 'vitest'
-import { computeMinimapData } from '../routes/SessionDetailPage'
+import { computeMinimapData } from '../components/FlatLogView'
 import type { StoredEvent } from '../api'
 
 function errorEvent(seq: number, ts: number): StoredEvent {

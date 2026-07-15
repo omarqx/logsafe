@@ -6,6 +6,7 @@ export interface EventFilters {
   ns?: string
   level?: string
   source?: string
+  type?: string
   trace?: string
   q?: string
   from_ts?: number
@@ -77,6 +78,13 @@ export function queryEvents(
     if (sourcesList.length > 0) {
       where.push(`source IN (${sourcesList.map(() => '?').join(',')})`)
       params.push(...sourcesList)
+    }
+  }
+  if (f.type) {
+    const types = csv(f.type)
+    if (types.length > 0) {
+      where.push(`type IN (${types.map(() => '?').join(',')})`)
+      params.push(...types)
     }
   }
   if (f.trace) {

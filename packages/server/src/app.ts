@@ -34,6 +34,7 @@ function parseFilters(q: Record<string, unknown>): EventFilters {
     ns: str(q.ns),
     level: str(q.level),
     source: str(q.source),
+    type: str(q.type),
     trace: str(q.trace),
     q: str(q.q),
     from_ts: num(q.from_ts),
