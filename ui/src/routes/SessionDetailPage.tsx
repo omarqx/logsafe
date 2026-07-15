@@ -14,7 +14,7 @@ import { filtersFromSearch, filtersToSearch, filtersToApiParams, toggleErrorLeve
 import { formatTs, formatDuration, parseTsMode, type TsMode } from '../lib/time'
 import { sourceColorIndex } from '../lib/sources'
 import { binEvents, minimapFractionToIndex, type MinimapBin } from '../lib/minimap'
-import { confirmAndPurge } from '../lib/purge'
+import { confirmAndPurge, applyPurgeOutcome } from '../lib/purge'
 import type { SuggestContext } from '../lib/suggest'
 import { isModifierKeyEvent } from '../lib/keyboard'
 import { CmdBar } from '../components/CmdBar'
@@ -128,6 +128,14 @@ export function SessionDetailPage() {
 
   const cmdInputRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<HTMLDivElement>(null)
+  // Re-entrancy guard for handlePurge: a purge already blocks on
+  // window.confirm, but the confirm dialog doesn't disable the underlying
+  // `purge` button — a second click while the first purge's confirmFn/
+  // purgeFn await is still in flight (e.g. a fast double-click racing the
+  // dialog close) would otherwise open a second confirm on data the first
+  // click already deleted. A ref (not state) since this never needs to
+  // trigger a render.
+  const purgingRef = useRef(false)
 
   // Session summary (totals for the header/status bar) — polled like the
   // session list, since it's independent of the filtered event stream.
@@ -266,27 +274,43 @@ export function SessionDetailPage() {
   // here, per spec (a purge already blocks on window.confirm, so the extra
   // few seconds of stale header counts is an acceptable trade against a
   // second effect/state path). confirmAndPurge (lib/purge.ts) owns the
-  // confirm-dialog text and the declined/purged/purged-all branching so it
-  // can be unit-tested without mounting this page.
+  // confirm-dialog text and the declined/purged/purged-all branching, and
+  // applyPurgeOutcome (also lib/purge.ts) owns the outcome -> action
+  // mapping, so both can be unit-tested without mounting this page.
+  //
+  // The try/catch below deliberately wraps *only* the confirmAndPurge
+  // await, not the post-success navigate('/')/updateFilters(...) call: only
+  // confirmAndPurge's purgeFn await can actually reject (the server delete
+  // failing), and that's the only case that should surface as "purge
+  // failed". A throw from the router or from updateFilters *after* the
+  // server delete already succeeded is a different failure entirely — it
+  // would previously have been caught here too and shown a false "purge
+  // failed" alert even though the events were already gone server-side.
   const handlePurge = useCallback(async () => {
     const floor = filters.after
     if (floor === undefined) return
+    if (purgingRef.current) return
+    purgingRef.current = true
     try {
-      const outcome = await confirmAndPurge({
-        id,
-        floor,
-        confirmFn: (message) => window.confirm(message),
-        purgeFn: purgeEvents,
-      })
-      if (outcome === 'declined') return
-      if (outcome === 'purged-all') {
-        navigate('/')
+      let outcome
+      try {
+        outcome = await confirmAndPurge({
+          id,
+          floor,
+          confirmFn: (message) => window.confirm(message),
+          purgeFn: purgeEvents,
+        })
+      } catch (err) {
+        console.error('[logsafe] failed to purge events:', err)
+        window.alert('purge failed: ' + (err instanceof Error ? err.message : String(err)))
         return
       }
-      updateFilters({ ...filters, after: undefined })
-    } catch (err) {
-      console.error('[logsafe] failed to purge events:', err)
-      window.alert('purge failed: ' + (err instanceof Error ? err.message : String(err)))
+      applyPurgeOutcome(outcome, {
+        navigateHome: () => navigate('/'),
+        clearFloor: () => updateFilters({ ...filters, after: undefined }),
+      })
+    } finally {
+      purgingRef.current = false
     }
   }, [id, filters, updateFilters, navigate])
 

@@ -25,3 +25,25 @@ export async function confirmAndPurge({ id, floor, confirmFn, purgeFn }: Confirm
   const result = await purgeFn(id, floor)
   return result.session === null ? 'purged-all' : 'purged'
 }
+
+export interface PurgeOutcomeActions {
+  // 'purged-all' means the session row itself is gone (every event was
+  // purged) — the caller navigates away rather than trying to keep
+  // rendering a session that no longer exists.
+  navigateHome: () => void
+  // 'purged' means the session survives with events remaining below the
+  // floor — the caller just drops the non-destructive `after` floor so the
+  // stream reloads from the start (see SessionDetailPage's handlePurge).
+  clearFloor: () => void
+}
+
+// Outcome -> UI-action mapping, extracted out of SessionDetailPage's
+// handlePurge so it's unit-testable without mounting the page (no router,
+// no DOM). 'declined' intentionally calls neither callback.
+export function applyPurgeOutcome(outcome: PurgeOutcome, { navigateHome, clearFloor }: PurgeOutcomeActions): void {
+  if (outcome === 'purged-all') {
+    navigateHome()
+  } else if (outcome === 'purged') {
+    clearFloor()
+  }
+}

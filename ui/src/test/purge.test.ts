@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { confirmAndPurge } from '../lib/purge'
+import { confirmAndPurge, applyPurgeOutcome } from '../lib/purge'
 import type { SessionSummary } from '../api'
 
 const SESSION: SessionSummary = {
@@ -52,5 +52,31 @@ describe('confirmAndPurge', () => {
     const confirmFn = vi.fn().mockReturnValue(true)
     const purgeFn = vi.fn().mockRejectedValue(new Error('boom'))
     await expect(confirmAndPurge({ id: 's1', floor: 500, confirmFn, purgeFn })).rejects.toThrow('boom')
+  })
+})
+
+describe('applyPurgeOutcome', () => {
+  it('calls navigateHome (and not clearFloor) for "purged-all"', () => {
+    const navigateHome = vi.fn()
+    const clearFloor = vi.fn()
+    applyPurgeOutcome('purged-all', { navigateHome, clearFloor })
+    expect(navigateHome).toHaveBeenCalledTimes(1)
+    expect(clearFloor).not.toHaveBeenCalled()
+  })
+
+  it('calls clearFloor (and not navigateHome) for "purged"', () => {
+    const navigateHome = vi.fn()
+    const clearFloor = vi.fn()
+    applyPurgeOutcome('purged', { navigateHome, clearFloor })
+    expect(clearFloor).toHaveBeenCalledTimes(1)
+    expect(navigateHome).not.toHaveBeenCalled()
+  })
+
+  it('calls neither callback for "declined"', () => {
+    const navigateHome = vi.fn()
+    const clearFloor = vi.fn()
+    applyPurgeOutcome('declined', { navigateHome, clearFloor })
+    expect(navigateHome).not.toHaveBeenCalled()
+    expect(clearFloor).not.toHaveBeenCalled()
   })
 })
