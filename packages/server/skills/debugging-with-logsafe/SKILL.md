@@ -13,12 +13,12 @@ always server arrival order (`seq`) — never trust client `ts` for ordering.
 
 1. **Check the server.** MCP: call `list_sessions`. HTTP:
    `curl -s localhost:4600/api/health` → `{"ok":true}`. If down, start it:
-   `npx logsafe` (background it; it binds 127.0.0.1 only). A running server
+   `npx @coglet/logsafe` (background it; it binds 127.0.0.1 only). A running server
    also hosts MCP over HTTP at `/mcp` (`claude mcp add --transport http logsafe http://127.0.0.1:4600/mcp`) —
    no subprocess needed.
 2. **Instrument the app under debug.** Always set a fresh, descriptive
    `session_label` per attempt so the session is findable.
-   - JS/TS: `npm i logsafe-client`, then
+   - JS/TS: `npm i @coglet/logsafe-client`, then
      `initLogsafe({ source: 'api', sessionLabel: 'bug-1234 attempt 1' })`
      and `createLog('payment')` → `log.debug/info/warn/error(msg, ctx)`.
      Use `createLog(ns).withTrace(id)` to follow one request across

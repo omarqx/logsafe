@@ -10,7 +10,7 @@ tail them while you debug. A web UI for browsing sessions ships built in
 ## Quickstart
 
 ```bash
-npx logsafe
+npx @coglet/logsafe
 # [logsafe] listening on http://127.0.0.1:4600  (db: ~/.logsafe/logsafe.db, retention: 7d)
 ```
 
@@ -29,7 +29,7 @@ The web UI ships built in — no separate build step needed. It's served at
 the same port as the API:
 
 ```bash
-npx logsafe
+npx @coglet/logsafe
 # open http://127.0.0.1:4600
 ```
 
@@ -39,13 +39,13 @@ tail over SSE.
 
 ## Logging from your app
 
-### JavaScript/TypeScript: `logsafe-client`
+### JavaScript/TypeScript: `@coglet/logsafe-client`
 
 Zero-dependency helper for browser or Node apps. It batches events and
 sends them over `POST /v1/log`.
 
 ```ts
-import { initLogsafe, createLog } from 'logsafe-client'
+import { initLogsafe, createLog } from '@coglet/logsafe-client'
 
 const { sessionId } = initLogsafe({ source: 'webapp' })
 const log = createLog('cart')
@@ -74,12 +74,12 @@ for the full field table, coercion rules, and status codes.
 
 ```jsonc
 // Cursor: ~/.cursor/mcp.json
-{ "mcpServers": { "logsafe": { "command": "npx", "args": ["logsafe", "mcp"] } } }
+{ "mcpServers": { "logsafe": { "command": "npx", "args": ["@coglet/logsafe", "mcp"] } } }
 ```
 
 ```bash
 # Claude Code:
-claude mcp add logsafe -- npx logsafe mcp
+claude mcp add logsafe -- npx @coglet/logsafe mcp
 ```
 
 Tools: `list_sessions`, `get_session`, `query_events`, `tail_session` —
@@ -96,7 +96,7 @@ claude mcp add --transport http logsafe http://127.0.0.1:4600/mcp
 { "mcpServers": { "logsafe": { "url": "http://127.0.0.1:4600/mcp" } } }
 ```
 
-The stdio form (`npx logsafe mcp`) still works for stdio-only clients.
+The stdio form (`npx @coglet/logsafe mcp`) still works for stdio-only clients.
 
 **Skill (Claude Code)** — a debugging workflow skill ships with this package:
 
@@ -115,7 +115,7 @@ Environment variables, read at server startup:
 | `RETENTION_DAYS` | `7` | Sessions older than this (by last event) are pruned automatically at startup and hourly. `0` or negative disables pruning. |
 
 ```bash
-LOGSAFE_DB=/tmp/logsafe-scratch.db PORT=4601 npx logsafe
+LOGSAFE_DB=/tmp/logsafe-scratch.db PORT=4601 npx @coglet/logsafe
 ```
 
 ## Docs

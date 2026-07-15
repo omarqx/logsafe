@@ -1,6 +1,6 @@
 # logsafe
 
-Run it: `npx logsafe` → http://127.0.0.1:4600
+Run it: `npx @coglet/logsafe` → http://127.0.0.1:4600
 
 ## What is this
 
@@ -78,13 +78,13 @@ on 4600).
 
 ## Logging from your app
 
-### JavaScript/TypeScript: `logsafe-client`
+### JavaScript/TypeScript: `@coglet/logsafe-client`
 
 Zero-dependency helper for browser or Node apps. It batches events and
 sends them over `POST /v1/log`.
 
 ```ts
-import { initLogsafe, createLog } from 'logsafe-client'
+import { initLogsafe, createLog } from '@coglet/logsafe-client'
 
 const { sessionId } = initLogsafe({
   source: 'webapp',              // required: identifies this process/app
@@ -175,12 +175,12 @@ path to finding and reading its logs. Full field/param reference is in
 
 ```jsonc
 // Cursor: ~/.cursor/mcp.json
-{ "mcpServers": { "logsafe": { "command": "npx", "args": ["logsafe", "mcp"] } } }
+{ "mcpServers": { "logsafe": { "command": "npx", "args": ["@coglet/logsafe", "mcp"] } } }
 ```
 
 ```bash
 # Claude Code:
-claude mcp add logsafe -- npx logsafe mcp
+claude mcp add logsafe -- npx @coglet/logsafe mcp
 ```
 
 Tools: `list_sessions`, `get_session`, `query_events`, `tail_session` —
@@ -197,7 +197,7 @@ claude mcp add --transport http logsafe http://127.0.0.1:4600/mcp
 { "mcpServers": { "logsafe": { "url": "http://127.0.0.1:4600/mcp" } } }
 ```
 
-The stdio form (`npx logsafe mcp`) still works for stdio-only clients.
+The stdio form (`npx @coglet/logsafe mcp`) still works for stdio-only clients.
 
 **Skill (Claude Code)** — a debugging workflow skill ships in this repo/package:
 
