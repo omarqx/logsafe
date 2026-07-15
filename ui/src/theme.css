@@ -75,6 +75,134 @@ header {
   color: var(--phos);
   font-weight: 700;
   letter-spacing: 0.04em;
+  text-decoration: none;
+  cursor: pointer;
+}
+.logo:hover {
+  text-shadow: 0 0 8px rgba(74, 240, 168, 0.5);
+}
+
+.help-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--faint);
+  border-radius: 3px;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.help-btn:hover {
+  border-color: var(--phos);
+  color: var(--phos);
+}
+
+.crumb-link {
+  color: var(--dim);
+  text-decoration: none;
+  cursor: pointer;
+}
+.crumb-link:hover {
+  color: var(--phos);
+  text-decoration: underline;
+}
+
+/* ── cheat sheet overlay ─────────────────────────────────── */
+.cheat-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+.cheat-panel {
+  width: min(920px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+.cheat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.cheat-title {
+  color: var(--phos);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.cheat-close {
+  background: transparent;
+  border: 1px solid var(--faint);
+  border-radius: 3px;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.cheat-close:hover {
+  border-color: var(--phos);
+  color: var(--phos);
+}
+.cheat-cols {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 28px;
+  padding: 18px 22px 22px;
+}
+@media (max-width: 720px) {
+  .cheat-cols {
+    grid-template-columns: 1fr;
+  }
+}
+.cheat-cols h4 {
+  color: var(--txt);
+  font-weight: 700;
+  font-size: 12px;
+  margin: 0 0 10px;
+}
+.cheat-cols h4 em {
+  color: var(--faint);
+  font-style: normal;
+  font-weight: 400;
+}
+.cheat-dl {
+  margin: 0;
+}
+.cheat-row {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 12px;
+  padding: 3px 0;
+  align-items: baseline;
+}
+.cheat-row dt {
+  color: var(--phos);
+  white-space: nowrap;
+}
+.cheat-row dd {
+  margin: 0;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.cheat-note {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
+.cheat-note code {
+  color: var(--dim);
 }
 
 .logo .cursor {

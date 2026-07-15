@@ -5,7 +5,7 @@
 // `params` and writes back through `setParams`, so a copied URL reproduces
 // the exact view in a fresh tab.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getSession, type SessionSummary, type StoredEvent } from '../api'
 import { useUrlState } from '../hooks/useUrlState'
@@ -564,7 +564,10 @@ export function SessionDetailPage() {
     <>
       <div className="crumbbar">
         <span className="crumb">
-          sessions / <b>{session?.label ?? id}</b>
+          <Link className="crumb-link" to="/">
+            sessions
+          </Link>{' '}
+          / <b>{session?.label ?? id}</b>
           {session?.label ? <> · {id}</> : null}
         </span>
         <div className="counts">
