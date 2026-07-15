@@ -49,6 +49,10 @@ export function buildApp({ db, now = Date.now, plugins = [] }: AppOptions): Fast
 
   app.register(cors, { origin: true })
 
+  const notifyPluginsDelete = (sessionId: string): void => {
+    for (const p of plugins) p.plugin.onSessionDelete?.(sessionId, p.ctx)
+  }
+
   // Be maximally accepting about content types: bare `curl -d` sends
   // x-www-form-urlencoded, sendBeacon sends text/plain — parse any body as JSON.
   const parseAsJson = (_req: unknown, body: unknown, done: (err: Error | null, body?: unknown) => void) => {
@@ -162,7 +166,7 @@ export function buildApp({ db, now = Date.now, plugins = [] }: AppOptions): Fast
 
   app.delete('/api/sessions/:id', (req, reply) => {
     const { id } = req.params as { id: string }
-    if (!deleteSession(db, id)) return reply.code(404).send({ error: 'session not found' })
+    if (!deleteSession(db, id, notifyPluginsDelete)) return reply.code(404).send({ error: 'session not found' })
     return reply.code(204).send()
   })
 

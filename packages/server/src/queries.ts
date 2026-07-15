@@ -162,10 +162,11 @@ export function getSession(db: Db, id: string, now: number): SessionSummary | nu
   return row ? rowToSession(row, now) : null
 }
 
-export function deleteSession(db: Db, id: string): boolean {
+export function deleteSession(db: Db, id: string, onDelete?: (sessionId: string) => void): boolean {
   const run = db.transaction((sid: string): boolean => {
     db.prepare('DELETE FROM events WHERE session_id = ?').run(sid)
     const res = db.prepare('DELETE FROM sessions WHERE id = ?').run(sid)
+    if (res.changes > 0) onDelete?.(sid)
     return res.changes > 0
   })
   return run(id)
