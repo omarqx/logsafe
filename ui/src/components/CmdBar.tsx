@@ -22,6 +22,10 @@ export interface CmdBarProps {
 const TS_MODES: TsMode[] = ['abs', 'rel', 'delta']
 const TS_LABELS: Record<TsMode, string> = { abs: 'abs', rel: 'rel', delta: 'Δ' }
 
+// Chip display order; 'after' included for forward compatibility (Task 3)
+// but only keys present in Filters will be considered for removal.
+const CHIP_ORDER = ['after', 'ns', 'level', 'source', 'trace', 'q'] as const
+
 // Stable identity so an omitted `suggestCtx` prop doesn't churn the
 // `suggest()` useMemo below on every render.
 const EMPTY_SUGGEST_CTX: SuggestContext = { sources: [], nsValues: [], traceValues: [] }
@@ -135,12 +139,29 @@ export function CmdBar({ filters, onChangeFilters, tsMode, onChangeTsMode, input
         // Dropdown already closed: let it bubble, today's blur-on-Esc stands.
         return
       }
+      if (e.key === 'Backspace' && text === '') {
+        // Find the last filter chip in display order and remove it
+        let lastChipKey: typeof CHIP_ORDER[number] | undefined
+        for (let i = CHIP_ORDER.length - 1; i >= 0; i--) {
+          const k = CHIP_ORDER[i]
+          if (k in filters && (filters as Record<string, unknown>)[k] !== undefined) {
+            lastChipKey = k
+            break
+          }
+        }
+        if (lastChipKey) {
+          e.preventDefault()
+          // Type guard: lastChipKey is a valid key only if it's in filters
+          removeFilter(lastChipKey as keyof Filters)
+        }
+        return
+      }
       if (e.key === 'Enter') {
         commit()
         return
       }
     },
-    [dropdownOpen, highlight, items, acceptSuggestion, commit],
+    [dropdownOpen, highlight, items, acceptSuggestion, commit, text, removeFilter],
   )
 
   const handleFocus = useCallback(() => {

@@ -86,6 +86,77 @@ describe('CmdBar', () => {
     expect(onChangeTsMode).toHaveBeenCalledWith('delta')
   })
 
+  describe('backspace on empty input', () => {
+    it('removes the last filter chip when input is empty', () => {
+      const onChangeFilters = vi.fn()
+      render(
+        <CmdBar
+          filters={{ ns: 'auth:*', level: 'error' }}
+          onChangeFilters={onChangeFilters}
+          tsMode="rel"
+          onChangeTsMode={() => {}}
+        />,
+      )
+      const input = screen.getByLabelText('filter or search') as HTMLInputElement
+      // Input is empty by default
+      expect(input.value).toBe('')
+      fireEvent.keyDown(input, { key: 'Backspace' })
+      // Should remove the last chip (level), keeping ns
+      expect(onChangeFilters).toHaveBeenCalledTimes(1)
+      expect(onChangeFilters).toHaveBeenCalledWith({ ns: 'auth:*', level: undefined })
+    })
+
+    it('does not remove a chip when input has text and Backspace is pressed', () => {
+      const onChangeFilters = vi.fn()
+      render(
+        <CmdBar
+          filters={{ ns: 'auth:*', level: 'error' }}
+          onChangeFilters={onChangeFilters}
+          tsMode="rel"
+          onChangeTsMode={() => {}}
+        />,
+      )
+      const input = screen.getByLabelText('filter or search') as HTMLInputElement
+      fireEvent.change(input, { target: { value: 'x' } })
+      fireEvent.keyDown(input, { key: 'Backspace' })
+      // Should not call onChangeFilters when text is present
+      expect(onChangeFilters).not.toHaveBeenCalled()
+    })
+
+    it('removes the only filter chip when input is empty and there is only q filter', () => {
+      const onChangeFilters = vi.fn()
+      render(
+        <CmdBar
+          filters={{ q: 'search term' }}
+          onChangeFilters={onChangeFilters}
+          tsMode="rel"
+          onChangeTsMode={() => {}}
+        />,
+      )
+      const input = screen.getByLabelText('filter or search') as HTMLInputElement
+      fireEvent.keyDown(input, { key: 'Backspace' })
+      // Should remove the q filter
+      expect(onChangeFilters).toHaveBeenCalledTimes(1)
+      expect(onChangeFilters).toHaveBeenCalledWith({ q: undefined })
+    })
+
+    it('does nothing when input is empty but there are no filters', () => {
+      const onChangeFilters = vi.fn()
+      render(
+        <CmdBar
+          filters={{}}
+          onChangeFilters={onChangeFilters}
+          tsMode="rel"
+          onChangeTsMode={() => {}}
+        />,
+      )
+      const input = screen.getByLabelText('filter or search') as HTMLInputElement
+      fireEvent.keyDown(input, { key: 'Backspace' })
+      // Should not call onChangeFilters when no filters exist
+      expect(onChangeFilters).not.toHaveBeenCalled()
+    })
+  })
+
   describe('autocomplete', () => {
     const suggestCtx = { sources: ['api', 'web'], nsValues: ['auth.login'], traceValues: ['t-1'] }
 

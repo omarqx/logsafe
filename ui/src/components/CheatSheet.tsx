@@ -21,6 +21,7 @@ const KEYS: Row[] = [
   { k: 'p', d: 'pin / unpin selected row (survives filter changes)' },
   { k: 't', d: 'cycle timestamps: absolute → relative → Δ prev' },
   { k: 'g / G', d: 'jump top / bottom  (G resumes live tail)' },
+  { k: '⌫ (input empty)', d: 'remove the last filter chip' },
   { k: 'x', d: 'delete session (on the session list)' },
   { k: '? / Esc', d: 'open this cheat sheet / close' },
 ]
