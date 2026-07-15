@@ -122,3 +122,13 @@ describe('sessions', () => {
     expect(listSessions(db, 50, 0.5, NOW)).toHaveLength(2)
   })
 })
+
+describe('queries: type surfaced', () => {
+  it('returns type on events and types[] on the session', () => {
+    const db = openDb(':memory:')
+    const ev = normalizeEvent({ msg: 'a', session_id: 's1', type: 'psdk' }, 5)!
+    insertBatch(db, [ev])
+    expect(queryEvents(db, 's1', {}).events[0].type).toBe('psdk')
+    expect(getSession(db, 's1', 10)!.types).toEqual(['psdk'])
+  })
+})

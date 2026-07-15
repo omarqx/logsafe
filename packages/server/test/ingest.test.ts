@@ -61,3 +61,18 @@ describe('insertBatch', () => {
     expect(stored[0].seq).toBeGreaterThan(4)                     // 5 with AUTOINCREMENT; 3 if rowid were reused
   })
 })
+
+describe('ingest: event type', () => {
+  it('stores explicit type and derives the session types set', () => {
+    const db = openDb(':memory:')
+    const t = 1000
+    const evs = [
+      normalizeEvent({ msg: 'a', session_id: 's1', type: 'psdk' }, t),
+      normalizeEvent({ msg: 'b', session_id: 's1' }, t),
+    ].filter((e): e is NonNullable<typeof e> => e !== null)
+    const stored = insertBatch(db, evs)
+    expect(stored.map((e) => e.type).sort()).toEqual(['generic', 'psdk'])
+    const row = db.prepare(`SELECT types FROM sessions WHERE id = 's1'`).get() as { types: string }
+    expect(JSON.parse(row.types)).toEqual(['generic', 'psdk'])
+  })
+})

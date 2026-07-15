@@ -43,6 +43,7 @@ interface EventRow {
   msg: string
   ctx: string | null
   trace: string | null
+  type: string
 }
 
 function rowToEvent(row: EventRow): StoredEvent {
@@ -116,6 +117,7 @@ export interface SessionSummary {
   error_count: number
   warn_count: number
   sources: string[]
+  types: string[]
 }
 
 interface SessionRow {
@@ -127,6 +129,7 @@ interface SessionRow {
   error_count: number
   warn_count: number
   sources: string
+  types: string
 }
 
 function rowToSession(row: SessionRow, now: number): SessionSummary {
@@ -141,6 +144,7 @@ function rowToSession(row: SessionRow, now: number): SessionSummary {
     error_count: row.error_count,
     warn_count: row.warn_count,
     sources: JSON.parse(row.sources),
+    types: JSON.parse(row.types),
   }
 }
 
