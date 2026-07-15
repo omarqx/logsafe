@@ -7,6 +7,12 @@ export interface Filters {
   source?: string
   trace?: string
   q?: string
+  // Non-destructive "clear" seq floor (`c` key, see SessionDetailPage):
+  // events with seq <= after are hidden client-side. Deliberately NOT part
+  // of FILTER_KEYS/filtersToApiParams — it's not a server-side filter, it's
+  // the initial cursor useEventStream loads/tails from (see its floorSeq
+  // param), so it must never leak into per-page after_seq params.
+  after?: number
 }
 
 const FILTER_KEYS = ['ns', 'level', 'source', 'trace', 'q'] as const
@@ -17,6 +23,11 @@ export function filtersFromSearch(sp: URLSearchParams): Filters {
   for (const key of FILTER_KEYS) {
     const v = sp.get(key)
     if (v) f[key] = v
+  }
+  const afterRaw = sp.get('after')
+  if (afterRaw) {
+    const n = Number(afterRaw)
+    if (Number.isFinite(n) && Number.isInteger(n)) f.after = n
   }
   return f
 }
@@ -35,6 +46,11 @@ export function filtersToSearch(f: Filters, base?: URLSearchParams): URLSearchPa
     } else {
       sp.delete(key)
     }
+  }
+  if (f.after !== undefined) {
+    sp.set('after', String(f.after))
+  } else {
+    sp.delete('after')
   }
   return sp
 }

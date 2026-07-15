@@ -79,6 +79,33 @@ describe('CmdBar', () => {
     expect(onChangeFilters).toHaveBeenCalledWith({ ns: undefined, trace: 'req-1' })
   })
 
+  it('renders a `cleared` chip first when filters.after is set, with a seq-showing title, and removes it on x click', () => {
+    const onChangeFilters = vi.fn()
+    render(
+      <CmdBar
+        filters={{ after: 500, ns: 'payment.*' }}
+        onChangeFilters={onChangeFilters}
+        tsMode="abs"
+        onChangeTsMode={() => {}}
+      />,
+    )
+    const clearedChip = screen.getByText('cleared').closest('.chip')!
+    expect(clearedChip.getAttribute('title')).toBe('showing events after seq 500')
+
+    // 'cleared' must render before the 'ns' chip (CHIP_ORDER: after, ns, ...)
+    const nsChip = screen.getByText(/ns:payment\.\*/).closest('.chip')!
+    expect(clearedChip.compareDocumentPosition(nsChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    const xButton = clearedChip.querySelector('.x')!
+    fireEvent.click(xButton)
+    expect(onChangeFilters).toHaveBeenCalledWith({ after: undefined, ns: 'payment.*' })
+  })
+
+  it('does not render a `cleared` chip when filters.after is unset', () => {
+    render(<CmdBar filters={{}} onChangeFilters={() => {}} tsMode="abs" onChangeTsMode={() => {}} />)
+    expect(screen.queryByText('cleared')).toBeNull()
+  })
+
   it('calls onChangeTsMode when a ts segment is clicked', () => {
     const onChangeTsMode = vi.fn()
     render(<CmdBar filters={{}} onChangeFilters={() => {}} tsMode="rel" onChangeTsMode={onChangeTsMode} />)
@@ -121,6 +148,31 @@ describe('CmdBar', () => {
       fireEvent.keyDown(input, { key: 'Backspace' })
       // Should not call onChangeFilters when text is present
       expect(onChangeFilters).not.toHaveBeenCalled()
+    })
+
+    it('removes the last-in-CHIP_ORDER chip (q), not `after`, when both are present', () => {
+      const onChangeFilters = vi.fn()
+      render(
+        <CmdBar
+          filters={{ after: 500, q: 'search term' }}
+          onChangeFilters={onChangeFilters}
+          tsMode="rel"
+          onChangeTsMode={() => {}}
+        />,
+      )
+      const input = screen.getByLabelText('filter or search') as HTMLInputElement
+      fireEvent.keyDown(input, { key: 'Backspace' })
+      expect(onChangeFilters).toHaveBeenCalledWith({ after: 500, q: undefined })
+    })
+
+    it('removes `after` (the clear floor) once it is the only remaining chip', () => {
+      const onChangeFilters = vi.fn()
+      render(
+        <CmdBar filters={{ after: 500 }} onChangeFilters={onChangeFilters} tsMode="rel" onChangeTsMode={() => {}} />,
+      )
+      const input = screen.getByLabelText('filter or search') as HTMLInputElement
+      fireEvent.keyDown(input, { key: 'Backspace' })
+      expect(onChangeFilters).toHaveBeenCalledWith({ after: undefined })
     })
 
     it('removes the only filter chip when input is empty and there is only q filter', () => {

@@ -177,6 +177,14 @@ export function CmdBar({ filters, onChangeFilters, tsMode, onChangeTsMode, input
     <div className="cmdline">
       <span className="prompt">❯</span>
 
+      {filters.after !== undefined && (
+        <span className="chip on" title={'showing events after seq ' + filters.after}>
+          cleared{' '}
+          <span className="x" onClick={() => removeFilter('after')}>
+            ×
+          </span>
+        </span>
+      )}
       {filters.ns && (
         <span className="chip on">
           ns:{filters.ns}{' '}

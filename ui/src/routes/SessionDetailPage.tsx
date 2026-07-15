@@ -113,7 +113,10 @@ export function SessionDetailPage() {
   const [expandedSeq, setExpandedSeq] = useState<number | null>(null)
   const [lastFetchMs, setLastFetchMs] = useState<number | null>(null)
 
-  const [state, api] = useEventStream(id, apiParams, pinSeqs)
+  // filters.after is the `c`-key non-destructive clear floor (see
+  // lib/filters.ts) — read straight off the memoized `filters` (a primitive
+  // number|undefined, so no extra useMemo needed to keep it stable).
+  const [state, api] = useEventStream(id, apiParams, pinSeqs, filters.after)
   // useEventStream returns a fresh `{ pause, resume, refetch }` object
   // literal every render even though the functions themselves are stable
   // (useCallback with empty deps in the hook) — depending on `api` as a
@@ -532,6 +535,18 @@ export function SessionDetailPage() {
           e.preventDefault()
           updateFilters(toggleErrorLevel(filters))
           return
+        case 'c': {
+          // Non-destructive clear: set the seq floor to the newest loaded
+          // event, hiding everything up to now without deleting anything
+          // server-side. No-op if nothing has loaded yet. History PUSH (via
+          // updateFilters, same path as any other filter change) so the
+          // back button undoes it.
+          const newest = eventsRef.current.at(-1)?.seq
+          if (newest === undefined) return
+          e.preventDefault()
+          updateFilters({ ...filters, after: newest })
+          return
+        }
         case 'g':
           e.preventDefault()
           if (eventsRef.current.length > 0) {

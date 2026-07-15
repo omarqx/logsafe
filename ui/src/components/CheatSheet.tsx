@@ -18,6 +18,7 @@ const KEYS: Row[] = [
   { k: '/', d: 'focus search' },
   { k: 'f', d: 'focus filter input' },
   { k: 'e', d: 'toggle level:warn,error' },
+  { k: 'c', d: 'clear view — hide events up to now (remove the chip to restore)' },
   { k: 'p', d: 'pin / unpin selected row (survives filter changes)' },
   { k: 't', d: 'cycle timestamps: absolute → relative → Δ prev' },
   { k: 'g / G', d: 'jump top / bottom  (G resumes live tail)' },
