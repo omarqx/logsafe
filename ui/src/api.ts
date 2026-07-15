@@ -88,8 +88,10 @@ export type PluginFetch = <T = unknown>(path: string, init?: RequestInit) => Pro
 
 /** Scoped fetch to /api/plugins/<id>/… returning parsed JSON. */
 export function makePluginFetch(pluginId: string): PluginFetch {
+  const base = `/api/plugins/${encodeURIComponent(pluginId)}`
   return async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
-    const res = await fetch(`/api/plugins/${pluginId}${path}`, init)
+    const rel = path.startsWith('/') ? path : `/${path}`
+    const res = await fetch(`${base}${rel}`, init)
     await assertOk(res, `plugin ${pluginId} fetch ${path}`)
     return res.json() as Promise<T>
   }

@@ -149,4 +149,14 @@ describe('api additions', () => {
     globalThis.fetch = orig
     expect(calls[0]).toBe('/api/plugins/psdk/views/s1')
   })
+
+  it('normalizes a pluginFetch path with no leading slash', async () => {
+    const calls: string[] = []
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (url: string) => { calls.push(url); return { ok: true, status: 200, json: async () => ({ ok: 1 }) } }) as never
+    const pf = makePluginFetch('psdk')
+    await pf('views')
+    globalThis.fetch = orig
+    expect(calls[0]).toBe('/api/plugins/psdk/views')
+  })
 })

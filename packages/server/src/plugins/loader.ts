@@ -47,8 +47,8 @@ export async function loadServerPlugins(
       continue
     }
     const manifest = pkg.logsafe as PluginManifest | undefined
-    if (!manifest?.id || !manifest.apiVersion) {
-      console.warn(`[logsafe] plugin "${specifier}" has no valid "logsafe" manifest (missing id or apiVersion); skipping`)
+    if (!manifest?.id || !manifest.apiVersion || !Array.isArray(manifest.ownedTypes)) {
+      console.warn(`[logsafe] plugin "${specifier}" has no valid "logsafe" manifest (missing id, apiVersion, or ownedTypes); skipping`)
       continue
     }
     if (major(manifest.apiVersion) !== major(accept)) {

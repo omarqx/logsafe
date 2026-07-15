@@ -32,7 +32,9 @@ for (const spec of readConfig()) {
 }
 entries.sort((a, b) => b.priority - a.priority)
 
-const imports = entries.map((e, i) => `import p${i} from '${e.uiPath}'`).join('\n')
+// path.resolve() yields backslashes on Windows, which are invalid in ESM
+// import specifiers — normalize to forward slashes before interpolating.
+const imports = entries.map((e, i) => `import p${i} from '${e.uiPath.replace(/\\/g, '/')}'`).join('\n')
 const list = entries.map((_, i) => `p${i}`).join(', ')
 
 const lines = [

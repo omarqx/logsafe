@@ -50,8 +50,17 @@ export function buildApp({ db, now = Date.now, plugins = [] }: AppOptions): Fast
 
   app.register(cors, { origin: true })
 
+  // Core deletion must succeed even if a plugin's cleanup throws; isolate
+  // each plugin call so one bad plugin can't roll back the whole DELETE.
+  // Orphaned plugin rows keyed by the deleted session_id are harmless.
   const notifyPluginsDelete = (sessionId: string): void => {
-    for (const p of plugins) p.plugin.onSessionDelete?.(sessionId, p.ctx)
+    for (const p of plugins) {
+      try {
+        p.plugin.onSessionDelete?.(sessionId, p.ctx)
+      } catch (err) {
+        console.error(`[logsafe] plugin "${p.manifest.id}" onSessionDelete failed: ${(err as Error).message}`)
+      }
+    }
   }
 
   // Be maximally accepting about content types: bare `curl -d` sends

@@ -36,6 +36,12 @@ describe('plugin loader', () => {
     expect(loaded).toHaveLength(0)
   })
 
+  it('skips a plugin whose manifest is missing ownedTypes', async () => {
+    const db = openDb(':memory:')
+    const loaded = await loadServerPlugins(db, ['./plugin-notypes'], FIX)
+    expect(loaded).toHaveLength(0)
+  })
+
   it('skips a duplicate plugin id loaded from a second specifier', async () => {
     const db = openDb(':memory:')
     const loaded = await loadServerPlugins(db, ['./plugin-foo', './plugin-foo'], FIX)

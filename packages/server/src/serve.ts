@@ -43,7 +43,17 @@ export async function serve(): Promise<void> {
 
   function safePrune(): void {
     try {
-      const notify = (sid: string): void => { for (const p of plugins) p.plugin.onSessionDelete?.(sid, p.ctx) }
+      // Isolate each plugin's onSessionDelete failure so one throwing plugin
+      // can't block retention pruning forever (same rationale as app.ts).
+      const notify = (sid: string): void => {
+        for (const p of plugins) {
+          try {
+            p.plugin.onSessionDelete?.(sid, p.ctx)
+          } catch (err) {
+            console.error(`[logsafe] plugin "${p.manifest.id}" onSessionDelete failed: ${(err as Error).message}`)
+          }
+        }
+      }
       const pruned = pruneSessions(db, RETENTION_DAYS, Date.now(), notify)
       if (pruned > 0) console.log(`[logsafe] retention: pruned ${pruned} session(s) older than ${RETENTION_DAYS}d`)
     } catch (err) {

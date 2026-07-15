@@ -15,4 +15,10 @@ describe('plugin config', () => {
     fs.writeFileSync(path.join(dir, 'logsafe.config.json'), JSON.stringify({ plugins: ['a', './b'] }))
     expect(readPluginConfig(dir, {})).toEqual(['a', './b'])
   })
+
+  it('returns [] (does not throw) when "plugins" is present but not an array', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lsafe-'))
+    fs.writeFileSync(path.join(dir, 'logsafe.config.json'), JSON.stringify({ plugins: 'nope' }))
+    expect(readPluginConfig(dir, {})).toEqual([])
+  })
 })

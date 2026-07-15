@@ -8,7 +8,12 @@ export function readPluginConfig(cwd: string, env: NodeJS.ProcessEnv): string[] 
   if (!fs.existsSync(file)) return []
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as { plugins?: unknown }
-    if (!Array.isArray(parsed.plugins)) return []
+    if (!Array.isArray(parsed.plugins)) {
+      if (parsed.plugins !== undefined) {
+        console.warn(`[logsafe] ${file}: "plugins" must be an array of strings; ignoring`)
+      }
+      return []
+    }
     return parsed.plugins.filter((p): p is string => typeof p === 'string')
   } catch (err) {
     console.warn(`[logsafe] failed to read ${file}: ${(err as Error).message}`)
