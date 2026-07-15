@@ -106,6 +106,51 @@ describe('CmdBar', () => {
     expect(screen.queryByText('cleared')).toBeNull()
   })
 
+  describe('purge action on the cleared chip', () => {
+    it('does not render a purge button when onPurge is not provided', () => {
+      render(<CmdBar filters={{ after: 500 }} onChangeFilters={() => {}} tsMode="abs" onChangeTsMode={() => {}} />)
+      expect(screen.queryByText('purge')).toBeNull()
+    })
+
+    it('renders a purge button with the right title when onPurge is provided and floor is set', () => {
+      render(
+        <CmdBar
+          filters={{ after: 500 }}
+          onChangeFilters={() => {}}
+          tsMode="abs"
+          onChangeTsMode={() => {}}
+          onPurge={() => {}}
+        />,
+      )
+      const purgeButton = screen.getByText('purge')
+      expect(purgeButton.getAttribute('title')).toBe('permanently delete the hidden events')
+      // lives inside the cleared chip, not floating elsewhere
+      expect(purgeButton.closest('.chip')).toBe(screen.getByText('cleared').closest('.chip'))
+    })
+
+    it('does not render a purge button when onPurge is provided but there is no floor (no cleared chip at all)', () => {
+      render(<CmdBar filters={{}} onChangeFilters={() => {}} tsMode="abs" onChangeTsMode={() => {}} onPurge={() => {}} />)
+      expect(screen.queryByText('purge')).toBeNull()
+    })
+
+    it('calls onPurge when the purge button is clicked, without also removing the chip', () => {
+      const onPurge = vi.fn()
+      const onChangeFilters = vi.fn()
+      render(
+        <CmdBar
+          filters={{ after: 500 }}
+          onChangeFilters={onChangeFilters}
+          tsMode="abs"
+          onChangeTsMode={() => {}}
+          onPurge={onPurge}
+        />,
+      )
+      fireEvent.click(screen.getByText('purge'))
+      expect(onPurge).toHaveBeenCalledTimes(1)
+      expect(onChangeFilters).not.toHaveBeenCalled()
+    })
+  })
+
   it('calls onChangeTsMode when a ts segment is clicked', () => {
     const onChangeTsMode = vi.fn()
     render(<CmdBar filters={{}} onChangeFilters={() => {}} tsMode="rel" onChangeTsMode={onChangeTsMode} />)

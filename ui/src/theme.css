@@ -331,6 +331,12 @@ header .meta em {
   margin-left: 4px;
 }
 
+.chip .purge {
+  color: var(--err);
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
 .cmdline .right {
   margin-left: auto;
   color: var(--faint);

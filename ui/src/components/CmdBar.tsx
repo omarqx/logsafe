@@ -17,6 +17,12 @@ export interface CmdBarProps {
   onChangeTsMode: (mode: TsMode) => void
   inputRef?: Ref<HTMLInputElement>
   suggestCtx?: SuggestContext
+  // Present only when the page wants a permanent-delete affordance on the
+  // `cleared` chip (SessionDetailPage wires this to its handlePurge, which
+  // owns the confirm dialog and the API call — this component never
+  // destroys data itself, only ever removes filters/floors client-side).
+  // Omitted entirely -> no purge button, e.g. any other CmdBar consumer.
+  onPurge?: () => void
 }
 
 const TS_MODES: TsMode[] = ['abs', 'rel', 'delta']
@@ -47,7 +53,7 @@ function isKeyCompletion(insert: string): boolean {
   return insert.endsWith(':')
 }
 
-export function CmdBar({ filters, onChangeFilters, tsMode, onChangeTsMode, inputRef, suggestCtx }: CmdBarProps) {
+export function CmdBar({ filters, onChangeFilters, tsMode, onChangeTsMode, inputRef, suggestCtx, onPurge }: CmdBarProps) {
   const [text, setText] = useState('')
   const [focused, setFocused] = useState(false)
   // Esc dismisses the currently-shown list without blurring; typing again
@@ -180,6 +186,11 @@ export function CmdBar({ filters, onChangeFilters, tsMode, onChangeTsMode, input
       {filters.after !== undefined && (
         <span className="chip on" title={'showing events after seq ' + filters.after}>
           cleared{' '}
+          {onPurge && (
+            <span className="purge" title="permanently delete the hidden events" onClick={onPurge}>
+              purge
+            </span>
+          )}{' '}
           <span className="x" onClick={() => removeFilter('after')}>
             ×
           </span>

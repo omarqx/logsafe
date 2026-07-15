@@ -5,15 +5,16 @@
 // `params` and writes back through `setParams`, so a copied URL reproduces
 // the exact view in a fresh tab.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { getSession, type SessionSummary, type StoredEvent } from '../api'
+import { getSession, purgeEvents, type SessionSummary, type StoredEvent } from '../api'
 import { useUrlState } from '../hooks/useUrlState'
 import { useEventStream } from '../hooks/useEventStream'
 import { filtersFromSearch, filtersToSearch, filtersToApiParams, toggleErrorLevel, type Filters } from '../lib/filters'
 import { formatTs, formatDuration, parseTsMode, type TsMode } from '../lib/time'
 import { sourceColorIndex } from '../lib/sources'
 import { binEvents, minimapFractionToIndex, type MinimapBin } from '../lib/minimap'
+import { confirmAndPurge } from '../lib/purge'
 import type { SuggestContext } from '../lib/suggest'
 import { isModifierKeyEvent } from '../lib/keyboard'
 import { CmdBar } from '../components/CmdBar'
@@ -94,6 +95,7 @@ function parseSeqList(v: string | null): number[] {
 
 export function SessionDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { params, setParams } = useUrlState()
 
   // Memoized on `params` (react-router memoizes that object by
@@ -251,6 +253,42 @@ export function SessionDetailPage() {
     },
     [filters, updateFilters],
   )
+
+  // Purge action on the `cleared` chip (CmdBar's onPurge). filters.after is
+  // the soft-clear floor set by the `c` key below — purge turns it into a
+  // permanent delete of every event at/under that seq. On success, dropping
+  // `after` from the URL via updateFilters is enough to reload the stream:
+  // useEventStream's main effect depends on floorSeq as a plain primitive
+  // (see its dependency array comment), so N -> undefined is a real
+  // dependency change and gets the identical full teardown+reload a filter
+  // change gets — no explicit api.refetch() call needed. Header counts
+  // (crumbbar) are left to the existing 5s session poll rather than forced
+  // here, per spec (a purge already blocks on window.confirm, so the extra
+  // few seconds of stale header counts is an acceptable trade against a
+  // second effect/state path). confirmAndPurge (lib/purge.ts) owns the
+  // confirm-dialog text and the declined/purged/purged-all branching so it
+  // can be unit-tested without mounting this page.
+  const handlePurge = useCallback(async () => {
+    const floor = filters.after
+    if (floor === undefined) return
+    try {
+      const outcome = await confirmAndPurge({
+        id,
+        floor,
+        confirmFn: (message) => window.confirm(message),
+        purgeFn: purgeEvents,
+      })
+      if (outcome === 'declined') return
+      if (outcome === 'purged-all') {
+        navigate('/')
+        return
+      }
+      updateFilters({ ...filters, after: undefined })
+    } catch (err) {
+      console.error('[logsafe] failed to purge events:', err)
+      window.alert('purge failed: ' + (err instanceof Error ? err.message : String(err)))
+    }
+  }, [id, filters, updateFilters, navigate])
 
   const handleRowSelect = useCallback(
     (seq: number) => {
@@ -635,6 +673,7 @@ export function SessionDetailPage() {
         onChangeTsMode={updateTsMode}
         inputRef={cmdInputRef}
         suggestCtx={suggestCtx}
+        onPurge={handlePurge}
       />
 
       <PinnedStrip
