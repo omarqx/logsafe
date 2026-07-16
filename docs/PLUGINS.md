@@ -53,7 +53,7 @@ From `examples/plugin-http/package.json`:
 | `id` | yes | Unique plugin id. Used for the naming seam (`plugin_<id>_*` tables), the route mount (`/api/plugins/<id>/*`), and `pluginFetch`'s base URL. |
 | `version` | yes | Your plugin's own version (informational). |
 | `apiVersion` | yes | Major version of the plugin contract this plugin targets. Core is currently `PLUGIN_API_VERSION = '1'`; a mismatched **major** skips the plugin at load (§6). |
-| `ownedTypes` | yes | Type strings this plugin claims. Drives `afterInsert`/`transform` dispatch server-side and (for UI plugins) which `session.types` resolve to this plugin's views. |
+| `ownedTypes` | yes | Type strings this plugin claims. Drives `afterInsert`/`transform` dispatch server-side. The UI view owner is matched separately on `UIPlugin.type` via the registry (see §1.3). |
 | `priority` | no (default `0`) | Higher loads/matches first: matcher order at ingest, plugin load order, and (client-side) view-owner resolution when a session has more than one type. Ties break by manifest/config order. |
 | `server` | no | Module specifier for the `ServerPlugin` default export, relative to the package. Omit for a UI-only plugin. |
 | `ui` | no | Module specifier for the `UIPlugin` default export, relative to the package. Omit for a server-only plugin. |
@@ -76,14 +76,16 @@ events (maintained the same way `sources` already is).
 ### How the view owner is picked
 
 A session's list row and detail view are rendered by its **view owner**: the
-highest-`priority` **installed** plugin whose `ownedTypes` intersect
-`session.types`; ties break by registry order; no match → the flat view.
+first **installed** plugin (ordered by `priority`, then registry order) whose
+`UIPlugin.type` is in `session.types`; no match → the flat view.
 `resolveViewOwner(session, registry)` (`ui/src/plugins/registry.ts`) is a
 pure function of `session.types` + the installed UI registry, computed
-identically server- and client-side. A mixed session (`types: ["generic",
-"http"]`) opens the `http` plugin's detail view even though most of its
-events are still `generic` — that view then decides whether/how to show the
-generic events too (§4).
+identically server- and client-side. If your plugin owns several types
+server-side, its UI still registers under the single `UIPlugin.type`; sessions
+carrying only your other types fall back to the flat view. A mixed session
+(`types: ["generic", "http"]`) opens the `http` plugin's detail view even
+though most of its events are still `generic` — that view then decides
+whether/how to show the generic events too (§4).
 
 ## 2. Install & enable
 
@@ -120,7 +122,7 @@ is:
 | `transform(event)` | Right after your type is assigned. Return a patched event, or nothing. |
 | `migrate(ctx)` | Once at load, before `setup`. Create/upgrade your tables. |
 | `setup(ctx)` | Once at load, after `migrate`. One-time init (may be async). |
-| `afterInsert(events, ctx)` | Per insert batch, only events you own (`type ∈ ownedTypes`), grouped by session. Derive + persist metrics — **keep it fast** (ingest hot path). |
+| `afterInsert(events, ctx)` | Once per ingest batch with all events you own in that batch (may span multiple sessions — group by `session_id` yourself if needed). Derive + persist metrics — **keep it fast** (ingest hot path, see [#5](https://github.com/omarqx/logsafe/issues/5)). |
 | `routes(router, ctx)` | Once at load. Register HTTP routes under your namespace. |
 | `onSessionDelete(sessionId, ctx)` | On explicit delete, a `through_seq` purge that empties the session, or a retention prune. Clean up your rows. |
 | `teardown(ctx)` | Reserved for future graceful-shutdown support. |
@@ -151,6 +153,8 @@ transform: (e) => {
   return { ...e, ctx: { ...r, slow: true } } // flags a slow request in the flat log's ctx
 },
 ```
+
+(Simplified — the real example also guards non-object/array ctx; see `examples/plugin-http/server.ts`.)
 
 ### `migrate` — your own tables, the `plugin_<id>_*` rule
 
@@ -423,7 +427,7 @@ it('compiles against the SDK and resolves for its type', () => {
   event, later matchers aren't tried.
 - **`afterInsert` runs on the ingest hot path**, inside the request that
   wrote the batch. Keep it fast; defer heavier/unbounded work to your own
-  routes computed on read.
+  routes computed on read (see [#5](https://github.com/omarqx/logsafe/issues/5)).
 - **`apiVersion` is a major-version gate.** A manifest `apiVersion` whose
   major doesn't match the SDK's `PLUGIN_API_VERSION` is skipped at load
   with a logged reason, not a crash.
