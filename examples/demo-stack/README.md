@@ -32,7 +32,7 @@ image, so it takes a few minutes. Once it's up, open
 3. Open `job-worker` — **stat cards + a sparkline**, with job failures
    plotted as red dots.
 4. Open `webapp` — the plain flat view: level filters, a periodic error
-   burst visible as texture on the minimap, and (after ~20s) a
+   burst visible as texture on the minimap, and (first within ~5s, then every ~20s) a
    **"metrics plugin not installed"** banner on the one event type
    (`metrics`) no installed plugin owns.
 5. Everything live-tails — the generators never stop, so all three views
@@ -60,7 +60,7 @@ The compose file (`docker-compose.yml`) runs four services:
   `webapp` session.
 
 All three generators wait on `logsafe`'s healthcheck (`/api/health`) before
-starting, and retry silently if a POST fails, so `docker compose up` always
+starting, and drop the batch and continue if a POST fails, so `docker compose up` always
 comes up clean regardless of build order.
 
 ## Cleanup

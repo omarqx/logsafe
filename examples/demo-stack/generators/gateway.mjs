@@ -3,7 +3,10 @@
 const URL = process.env.LOGSAFE_URL ?? 'http://logsafe:4600/v1/log'
 const SESSION = { session_id: 'api-gateway', session_label: 'API gateway' }
 const ROUTES = ['/api/products', '/api/cart', '/api/search', '/api/checkout', '/api/user']
+// Seeded per process start: ids stay unique across container restarts, so a
+// persisted volume's derived rows (keyed by trace/job_id) are never overwritten.
 let n = 0
+const RUN = Date.now().toString(36)
 
 const rand = (a) => a[Math.floor(Math.random() * a.length)]
 function latency() {
@@ -22,7 +25,7 @@ async function post(events) {
 }
 
 async function tick() {
-  const trace = `r-${++n}`
+  const trace = `r-${RUN}-${++n}`
   const path = rand(ROUTES)
   const method = path === '/api/checkout' || path === '/api/cart' ? 'POST' : 'GET'
   const st = status(), lat = latency()
