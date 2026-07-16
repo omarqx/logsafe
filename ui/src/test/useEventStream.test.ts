@@ -457,6 +457,111 @@ describe('useEventStream: bounded SSE replay for sparse/empty filtered loads', (
   })
 })
 
+describe('useEventStream: floorSeq (non-destructive clear)', () => {
+  it('uses floorSeq as the FIRST fetchEventsPage after_seq, and as the stream resume cursor when no events are past it', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [], next_after_seq: null }))
+
+    const { result } = renderHook(() => useEventStream('s1', new URLSearchParams(), [], 500))
+    await act(async () => flush())
+
+    expect(result.current[0].loading).toBe(false)
+    expect(result.current[0].events).toEqual([])
+    const eventUrls = fetchMock.mock.calls.map((c) => c[0] as string).filter((u) => u.includes('/events'))
+    expect(eventUrls[0]).toBe('/api/sessions/s1/events?after_seq=500&limit=10000')
+
+    // no events past the floor were loaded, so the tail resumes from the
+    // floor itself, not 0.
+    expect(instances).toHaveLength(1)
+    expect(instances[0].url).toBe('/api/sessions/s1/stream?after_seq=500')
+  })
+
+  it('advances the resume cursor past the floor once matching events are loaded', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ events: [ev({ seq: 501 }), ev({ seq: 502 })], next_after_seq: null }),
+    )
+    const { result } = renderHook(() => useEventStream('s1', new URLSearchParams(), [], 500))
+    await act(async () => flush())
+
+    expect(result.current[0].events.map((e) => e.seq)).toEqual([501, 502])
+    expect(instances[0].url).toBe('/api/sessions/s1/stream?after_seq=502')
+  })
+
+  it('a floor change tears down the old EventSource, clears state, and reloads with the new after_seq (same as a filter change)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 501 })], next_after_seq: null }))
+    const { result, rerender } = renderHook(
+      ({ floorSeq }: { floorSeq: number }) => useEventStream('s1', new URLSearchParams(), [], floorSeq),
+      { initialProps: { floorSeq: 500 } },
+    )
+    await act(async () => flush())
+    expect(result.current[0].events.map((e) => e.seq)).toEqual([501])
+    const firstEs = instances[0]
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 901 })], next_after_seq: null }))
+    rerender({ floorSeq: 900 })
+
+    // reset is synchronous within the effect, same as refetch()/apiParams change
+    expect(result.current[0].loading).toBe(true)
+    expect(result.current[0].events).toEqual([])
+    expect(firstEs.closed).toBe(true)
+
+    await act(async () => flush())
+
+    expect(result.current[0].loading).toBe(false)
+    expect(result.current[0].events.map((e) => e.seq)).toEqual([901])
+    const eventUrls = fetchMock.mock.calls.map((c) => c[0] as string).filter((u) => u.includes('/events'))
+    expect(eventUrls.at(-1)).toBe('/api/sessions/s1/events?after_seq=900&limit=10000')
+    expect(instances).toHaveLength(2)
+    expect(instances[1].url).toBe('/api/sessions/s1/stream?after_seq=901')
+  })
+
+  it('composes with the sparse-filter probe: cursor becomes max(floor, matched, probed)', async () => {
+    // Filtered load matches nothing past the floor.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [], next_after_seq: null }))
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: 's1',
+        label: null,
+        first_ts: 0,
+        last_ts: 999,
+        duration_ms: 999,
+        status: 'idle',
+        event_count: 100_000,
+        error_count: 0,
+        warn_count: 0,
+        sources: ['webapp'],
+      }),
+    )
+    // Probe returns a seq lower than the floor — floor must win.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 200 })], next_after_seq: null }))
+
+    const apiParams = new URLSearchParams({ ns: 'nothing-matches:*' })
+    const { result } = renderHook(() => useEventStream('s1', apiParams, [], 500))
+    await act(async () => flush())
+
+    expect(result.current[0].loading).toBe(false)
+    expect(instances[0].url).toBe('/api/sessions/s1/stream?after_seq=500')
+  })
+
+  it('does not affect pin resolution: a pin below the floor still resolves via its own absolute-seq fetch', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [], next_after_seq: null }))
+    const { result, rerender } = renderHook(
+      ({ pins }: { pins: number[] }) => useEventStream('s1', new URLSearchParams(), pins, 500),
+      { initialProps: { pins: [] as number[] } },
+    )
+    await act(async () => flush())
+    expect(result.current[0].events).toEqual([])
+
+    // Pin seq 42, well below the floor (500) — must still be fetched and resolved.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 42 })], next_after_seq: null }))
+    rerender({ pins: [42] })
+    await act(async () => flush())
+
+    const pinCall = fetchMock.mock.calls.map((c) => c[0] as string).find((u) => u.includes('after_seq=41'))
+    expect(pinCall).toBe('/api/sessions/s1/events?after_seq=41&limit=1')
+    expect(result.current[0].pinned.map((e) => e.seq)).toEqual([42])
+  })
+})
+
 describe('useEventStream: SSE reconnect', () => {
   it('on error, closes and reopens after 1s using the latest seq cursor', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ events: [ev({ seq: 1 })], next_after_seq: null }))

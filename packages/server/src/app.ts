@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import type { Db } from './db.js'
 import { normalizeEvent, type NormalizedEvent } from './normalize.js'
 import { insertBatch, type StoredEvent } from './ingest.js'
-import { queryEvents, listSessions, getSession, deleteSession, type EventFilters } from './queries.js'
+import { queryEvents, listSessions, getSession, deleteSession, purgeEventsThrough, type EventFilters } from './queries.js'
 import { SseHub } from './sse.js'
 
 export const MAX_BATCH = 1000
@@ -157,6 +157,16 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     const { id } = req.params as { id: string }
     if (!deleteSession(db, id)) return reply.code(404).send({ error: 'session not found' })
     return reply.code(204).send()
+  })
+
+  app.delete('/api/sessions/:id/events', (req, reply) => {
+    const { id } = req.params as { id: string }
+    const q = req.query as Record<string, unknown>
+    if (!getSession(db, id, now())) return reply.code(404).send({ error: 'session not found' })
+    const throughSeq = num(q.through_seq)
+    if (throughSeq === undefined) return reply.code(400).send({ error: 'through_seq must be a finite number' })
+    const { deleted, sessionDeleted } = purgeEventsThrough(db, id, throughSeq)
+    return { deleted, session: sessionDeleted ? null : getSession(db, id, now()) }
   })
 
   app.get('/api/sessions/:id/stream', async (req, reply) => {

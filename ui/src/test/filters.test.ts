@@ -26,6 +26,31 @@ describe('filtersFromSearch', () => {
     const sp = new URLSearchParams('ns=a&level=b&source=c&trace=d&q=e')
     expect(filtersFromSearch(sp)).toEqual({ ns: 'a', level: 'b', source: 'c', trace: 'd', q: 'e' })
   })
+
+  it('parses a valid integer `after` seq floor', () => {
+    const sp = new URLSearchParams('after=500')
+    expect(filtersFromSearch(sp)).toEqual({ after: 500 })
+  })
+
+  it('ignores a garbage (non-numeric) `after` value', () => {
+    const sp = new URLSearchParams('after=abc')
+    expect(filtersFromSearch(sp)).toEqual({})
+  })
+
+  it('ignores a non-finite `after` value', () => {
+    const sp = new URLSearchParams('after=Infinity')
+    expect(filtersFromSearch(sp)).toEqual({})
+  })
+
+  it('ignores a non-integer `after` value', () => {
+    const sp = new URLSearchParams('after=1.5')
+    expect(filtersFromSearch(sp)).toEqual({})
+  })
+
+  it('accepts `after=0`', () => {
+    const sp = new URLSearchParams('after=0')
+    expect(filtersFromSearch(sp)).toEqual({ after: 0 })
+  })
 })
 
 describe('filtersToSearch', () => {
@@ -52,6 +77,19 @@ describe('filtersToSearch', () => {
     expect(sp.get('ts')).toBe('rel')
     expect(sp.get('pin')).toBe('1')
     expect(sp.get('sel')).toBe('9')
+  })
+
+  it('round-trips a filter set including `after`', () => {
+    const f: Filters = { ns: 'auth:*', after: 500 }
+    const sp = filtersToSearch(f, new URLSearchParams('ts=rel'))
+    expect(sp.get('after')).toBe('500')
+    expect(filtersFromSearch(sp)).toEqual(f)
+  })
+
+  it('removes `after` from the result when absent from the new Filters', () => {
+    const base = new URLSearchParams('ts=abs&after=500&ns=old')
+    const result = filtersToSearch({ ns: 'old' }, base)
+    expect(result.has('after')).toBe(false)
   })
 
   it('works with no base params supplied', () => {
@@ -85,6 +123,12 @@ describe('filtersToApiParams', () => {
 
   it('produces an empty URLSearchParams for an empty Filters object', () => {
     expect(filtersToApiParams({}).toString()).toBe('')
+  })
+
+  it('never emits `after` — the hook owns per-page cursors, not the API filter set', () => {
+    const api = filtersToApiParams({ ns: 'auth:*', after: 500 })
+    expect(api.has('after')).toBe(false)
+    expect(api.get('ns')).toBe('auth:*')
   })
 })
 

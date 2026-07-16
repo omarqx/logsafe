@@ -5,15 +5,17 @@
 // `params` and writes back through `setParams`, so a copied URL reproduces
 // the exact view in a fresh tab.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { getSession, type SessionSummary, type StoredEvent } from '../api'
+import { getSession, purgeEvents, type SessionSummary, type StoredEvent } from '../api'
 import { useUrlState } from '../hooks/useUrlState'
 import { useEventStream } from '../hooks/useEventStream'
 import { filtersFromSearch, filtersToSearch, filtersToApiParams, toggleErrorLevel, type Filters } from '../lib/filters'
 import { formatTs, formatDuration, parseTsMode, type TsMode } from '../lib/time'
 import { sourceColorIndex } from '../lib/sources'
 import { binEvents, minimapFractionToIndex, type MinimapBin } from '../lib/minimap'
+import { confirmAndPurge, applyPurgeOutcome } from '../lib/purge'
+import type { SuggestContext } from '../lib/suggest'
 import { isModifierKeyEvent } from '../lib/keyboard'
 import { CmdBar } from '../components/CmdBar'
 import { LogRow } from '../components/LogRow'
@@ -93,6 +95,7 @@ function parseSeqList(v: string | null): number[] {
 
 export function SessionDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { params, setParams } = useUrlState()
 
   // Memoized on `params` (react-router memoizes that object by
@@ -112,7 +115,10 @@ export function SessionDetailPage() {
   const [expandedSeq, setExpandedSeq] = useState<number | null>(null)
   const [lastFetchMs, setLastFetchMs] = useState<number | null>(null)
 
-  const [state, api] = useEventStream(id, apiParams, pinSeqs)
+  // filters.after is the `c`-key non-destructive clear floor (see
+  // lib/filters.ts) — read straight off the memoized `filters` (a primitive
+  // number|undefined, so no extra useMemo needed to keep it stable).
+  const [state, api] = useEventStream(id, apiParams, pinSeqs, filters.after)
   // useEventStream returns a fresh `{ pause, resume, refetch }` object
   // literal every render even though the functions themselves are stable
   // (useCallback with empty deps in the hook) — depending on `api` as a
@@ -122,6 +128,14 @@ export function SessionDetailPage() {
 
   const cmdInputRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<HTMLDivElement>(null)
+  // Re-entrancy guard for handlePurge: a purge already blocks on
+  // window.confirm, but the confirm dialog doesn't disable the underlying
+  // `purge` button — a second click while the first purge's confirmFn/
+  // purgeFn await is still in flight (e.g. a fast double-click racing the
+  // dialog close) would otherwise open a second confirm on data the first
+  // click already deleted. A ref (not state) since this never needs to
+  // trigger a render.
+  const purgingRef = useRef(false)
 
   // Session summary (totals for the header/status bar) — polled like the
   // session list, since it's independent of the filtered event stream.
@@ -171,6 +185,30 @@ export function SessionDetailPage() {
       }
     }
     return list
+  }, [session, state.events])
+
+  // Autocomplete context for CmdBar's dropdown (lib/suggest.ts): one
+  // memoized O(n) pass over `state.events` computes both nsValues (sorted
+  // distinct) and traceValues (distinct, most-recent-first, cap 8).
+  // `sources` comes from the session summary (authoritative), not the
+  // loaded/filtered events — same source sourcesList above prefers.
+  const suggestCtx = useMemo<SuggestContext>(() => {
+    const nsSet = new Set<string>()
+    const traceSeen = new Set<string>()
+    const traceValues: string[] = []
+    for (let i = state.events.length - 1; i >= 0; i--) {
+      const ev = state.events[i]
+      if (ev.ns) nsSet.add(ev.ns)
+      if (ev.trace && !traceSeen.has(ev.trace)) {
+        traceSeen.add(ev.trace)
+        if (traceValues.length < 8) traceValues.push(ev.trace)
+      }
+    }
+    return {
+      sources: session?.sources ?? [],
+      nsValues: Array.from(nsSet).sort(),
+      traceValues,
+    }
   }, [session, state.events])
 
   const sessionStart = session?.first_ts ?? state.events[0]?.ts ?? 0
@@ -223,6 +261,58 @@ export function SessionDetailPage() {
     },
     [filters, updateFilters],
   )
+
+  // Purge action on the `cleared` chip (CmdBar's onPurge). filters.after is
+  // the soft-clear floor set by the `c` key below — purge turns it into a
+  // permanent delete of every event at/under that seq. On success, dropping
+  // `after` from the URL via updateFilters is enough to reload the stream:
+  // useEventStream's main effect depends on floorSeq as a plain primitive
+  // (see its dependency array comment), so N -> undefined is a real
+  // dependency change and gets the identical full teardown+reload a filter
+  // change gets — no explicit api.refetch() call needed. Header counts
+  // (crumbbar) are left to the existing 5s session poll rather than forced
+  // here, per spec (a purge already blocks on window.confirm, so the extra
+  // few seconds of stale header counts is an acceptable trade against a
+  // second effect/state path). confirmAndPurge (lib/purge.ts) owns the
+  // confirm-dialog text and the declined/purged/purged-all branching, and
+  // applyPurgeOutcome (also lib/purge.ts) owns the outcome -> action
+  // mapping, so both can be unit-tested without mounting this page.
+  //
+  // The try/catch below deliberately wraps *only* the confirmAndPurge
+  // await, not the post-success navigate('/')/updateFilters(...) call: only
+  // confirmAndPurge's purgeFn await can actually reject (the server delete
+  // failing), and that's the only case that should surface as "purge
+  // failed". A throw from the router or from updateFilters *after* the
+  // server delete already succeeded is a different failure entirely — it
+  // would previously have been caught here too and shown a false "purge
+  // failed" alert even though the events were already gone server-side.
+  const handlePurge = useCallback(async () => {
+    const floor = filters.after
+    if (floor === undefined) return
+    if (purgingRef.current) return
+    purgingRef.current = true
+    try {
+      let outcome
+      try {
+        outcome = await confirmAndPurge({
+          id,
+          floor,
+          confirmFn: (message) => window.confirm(message),
+          purgeFn: purgeEvents,
+        })
+      } catch (err) {
+        console.error('[logsafe] failed to purge events:', err)
+        window.alert('purge failed: ' + (err instanceof Error ? err.message : String(err)))
+        return
+      }
+      applyPurgeOutcome(outcome, {
+        navigateHome: () => navigate('/'),
+        clearFloor: () => updateFilters({ ...filters, after: undefined }),
+      })
+    } finally {
+      purgingRef.current = false
+    }
+  }, [id, filters, updateFilters, navigate])
 
   const handleRowSelect = useCallback(
     (seq: number) => {
@@ -507,6 +597,18 @@ export function SessionDetailPage() {
           e.preventDefault()
           updateFilters(toggleErrorLevel(filters))
           return
+        case 'c': {
+          // Non-destructive clear: set the seq floor to the newest loaded
+          // event, hiding everything up to now without deleting anything
+          // server-side. No-op if nothing has loaded yet. History PUSH (via
+          // updateFilters, same path as any other filter change) so the
+          // back button undoes it.
+          const newest = eventsRef.current.at(-1)?.seq
+          if (newest === undefined) return
+          e.preventDefault()
+          updateFilters({ ...filters, after: newest })
+          return
+        }
         case 'g':
           e.preventDefault()
           if (eventsRef.current.length > 0) {
@@ -564,7 +666,10 @@ export function SessionDetailPage() {
     <>
       <div className="crumbbar">
         <span className="crumb">
-          sessions / <b>{session?.label ?? id}</b>
+          <Link className="crumb-link" to="/">
+            sessions
+          </Link>{' '}
+          / <b>{session?.label ?? id}</b>
           {session?.label ? <> · {id}</> : null}
         </span>
         <div className="counts">
@@ -591,6 +696,8 @@ export function SessionDetailPage() {
         tsMode={tsMode}
         onChangeTsMode={updateTsMode}
         inputRef={cmdInputRef}
+        suggestCtx={suggestCtx}
+        onPurge={handlePurge}
       />
 
       <PinnedStrip

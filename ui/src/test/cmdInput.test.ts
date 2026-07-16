@@ -52,4 +52,24 @@ describe('parseCmdInput', () => {
       q: 'foo:bar',
     })
   })
+
+  it('recognizes q: as an explicit free-text prefix (ctx-field fragments)', () => {
+    // the documented ctx-field trick — colons and quotes in the value survive
+    expect(parseCmdInput('q:"label":"Dogs"')).toEqual({
+      filters: {},
+      q: '"label":"Dogs"',
+    })
+  })
+
+  it('q: combines with other filters and is equivalent to the bare form', () => {
+    expect(parseCmdInput('source:vote q:"label":"Dogs"')).toEqual({
+      filters: { source: 'vote' },
+      q: '"label":"Dogs"',
+    })
+    // bare (no q: prefix) yields the same q
+    expect(parseCmdInput('source:vote "label":"Dogs"')).toEqual({
+      filters: { source: 'vote' },
+      q: '"label":"Dogs"',
+    })
+  })
 })

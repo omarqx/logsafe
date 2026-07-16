@@ -4,6 +4,14 @@
 // fetchEventsPage) and client-side for the SSE tail (the /stream endpoint
 // has no filter params — see API.md — so every event is re-tested locally
 // with the exact same predicate the server uses, lib/predicate.ts).
+//
+// `floorSeq` (Task 3, the `c` key non-destructive clear) is a separate
+// concept from filters: it's a seq cursor, not a predicate. It seeds both
+// the initial page-load cursor and the tail-resume cursor (lastSeqRef), and
+// is part of the main effect's reload identity so a floor change tears down
+// and reloads exactly like a filter change. It never touches pin
+// resolution — pins fetch by absolute seq on a wholly independent path and
+// must resolve regardless of the floor.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchEventsPage, getSession, type StoredEvent } from '../api'
 import { filtersFromSearch } from '../lib/filters'
@@ -43,6 +51,19 @@ export function useEventStream(
   sessionId: string,
   apiParams: URLSearchParams,
   pinSeqs: number[],
+  // Non-destructive "clear" seq floor (`c` key — see lib/filters.ts
+  // `Filters.after` / SessionDetailPage). NOT an ordinary filter: it never
+  // reaches apiParams (filtersToApiParams deliberately excludes it — this
+  // hook owns per-page after_seq cursors). Instead it's the INITIAL value
+  // for both the page-load cursor and lastSeqRef's tail-resume cursor, so
+  // the first fetchEventsPage call uses after_seq=floorSeq and SSE
+  // reconnect/tail never replays anything at/below the floor. A floor
+  // change goes through the same [..., floorSeq] dependency as apiParamsKey
+  // below, so it gets the identical full teardown+reload (gen bump) as a
+  // filter change. Deliberately NOT threaded into the pin-resolution effect
+  // below — pins fetch by absolute seq via a wholly separate, floor-blind
+  // code path and must keep resolving even for seqs below the floor.
+  floorSeq?: number,
 ): [StreamState, StreamApi] {
   const [events, setEvents] = useState<StoredEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -80,7 +101,7 @@ export function useEventStream(
     filtersRef.current = filtersFromSearch(apiParams)
     tailRef.current = 'live'
     pendingRef.current = []
-    lastSeqRef.current = 0
+    lastSeqRef.current = floorSeq ?? 0
     setTail('live')
     setPendingCount(0)
     eventsRef.current = []
@@ -142,7 +163,10 @@ export function useEventStream(
     async function load(): Promise<void> {
       try {
         const acc: StoredEvent[] = []
-        let after: number | undefined
+        // Start the page-load cursor at the floor (undefined when there is
+        // none, matching prior behavior exactly): the very first
+        // fetchEventsPage call then requests after_seq=floorSeq.
+        let after: number | undefined = floorSeq
         for (;;) {
           const page = await fetchEventsPage(sessionId, apiParams, after, PAGE_LIMIT)
           if (myGen !== genRef.current) return
@@ -157,8 +181,10 @@ export function useEventStream(
 
         // Bound SSE replay when a filter is active. The tail cursor
         // (lastSeqRef) only ever advances to the last *matched* event's seq
-        // above — if the filter matches nothing (or only early events) that
-        // leaves lastSeqRef low, and /stream (which has no filter params,
+        // above (seeded to floorSeq before the load loop runs, so "matched"
+        // here already means "matched and >= floor") — if the filter
+        // matches nothing (or only early events) that leaves lastSeqRef low
+        // (but never below floorSeq), and /stream (which has no filter params,
         // see the file header) would replay the entire rest of the session
         // client-side on every filter change/reconnect. One extra unfiltered
         // probe request bounds that: ask for the first event at the
@@ -213,10 +239,13 @@ export function useEventStream(
       teardownStream()
     }
     // apiParams/pinSeqs are objects recreated every render by callers; the
-    // stable primitives (apiParamsKey, sessionId, reloadToken) are the real
-    // dependencies — see the eslint-disable rationale in comments above.
+    // stable primitives (apiParamsKey, sessionId, reloadToken, floorSeq) are
+    // the real dependencies — see the eslint-disable rationale in comments
+    // above. floorSeq is included so a floor change (the `c` key) gets the
+    // exact same full teardown+reload as an apiParams change, not just a
+    // silent cursor mutation on the next reconnect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, apiParamsKey, reloadToken])
+  }, [sessionId, apiParamsKey, reloadToken, floorSeq])
 
   // Pin resolution: independent of filters/tail. Anything in `pinSeqs`
   // already present in events (via eventsRef, see below) is reused as-is;
