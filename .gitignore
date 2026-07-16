@@ -6,4 +6,4 @@ dist/
 packages/server/public/
 
 # Per-deployment plugin config (like the db, never committed)
-logsafe.config.json
+/logsafe.config.json

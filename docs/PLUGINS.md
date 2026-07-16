@@ -5,11 +5,13 @@ ingest, derive and store its own metrics, serve its own API routes, and
 render a custom list row / detail view for sessions carrying that type. The
 core stays generic — plugins own everything type-specific.
 
-Two tested examples ship in this repo — `examples/plugin-hello` (smallest
-possible plugin: badge + banner, no tables, no routes) and
+Three tested examples ship in this repo — `examples/plugin-hello` (smallest
+possible plugin: badge + banner, no tables, no routes),
 `examples/plugin-http` (full worked example: classification, a derived
-table, routes, an SVG timeline) — plus a blank scaffold at
-`templates/plugin-starter` to copy for a new plugin.
+table, routes, an SVG timeline), and `examples/plugin-jobs` (stateful
+lifecycle derivation + a stat-cards/sparkline detail view — the read-only
+visual recipe) — plus a blank scaffold at `templates/plugin-starter` to copy
+for a new plugin.
 
 ## 1. What a plugin is
 
