@@ -4,10 +4,18 @@
   "type": "module",
   "license": "MIT",
   "description": "Types and runtime helpers for building logsafe plugins.",
+  "keywords": ["logsafe", "plugin", "sdk", "logging", "debugging"],
   "exports": {
     "./server": { "types": "./src/server.ts", "default": "./src/server.ts" },
-    "./ui": { "types": "./src/ui.tsx", "default": "./src/ui.tsx" }
+    "./ui": { "types": "./src/ui.tsx", "default": "./src/ui.tsx" },
+    "./package.json": "./package.json"
   },
+  "files": ["src", "LICENSE", "README.md"],
+  "engines": { "node": ">=20" },
+  "repository": { "type": "git", "url": "git+https://github.com/omarqx/logsafe.git", "directory": "packages/plugin-sdk" },
+  "bugs": "https://github.com/omarqx/logsafe/issues",
+  "homepage": "https://github.com/omarqx/logsafe/blob/main/docs/PLUGINS.md",
+  "publishConfig": { "access": "public" },
   "peerDependencies": { "react": "^19" },
   "peerDependenciesMeta": { "react": { "optional": true } },
   "devDependencies": {
