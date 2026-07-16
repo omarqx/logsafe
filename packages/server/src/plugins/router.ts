@@ -16,9 +16,11 @@ export function mountPluginRoutes(app: FastifyInstance, plugins: LoadedServerPlu
       })
       return result
     }
+    // Routes registered without a leading slash are normalized, matching makePluginFetch
+    const mount = (path: string) => `${prefix}${path.startsWith('/') ? path : `/${path}`}`
     const router: PluginRouter = {
-      get: (path, handler) => { app.get(`${prefix}${path}`, adapt(handler)) },
-      post: (path, handler) => { app.post(`${prefix}${path}`, adapt(handler)) },
+      get: (path, handler) => { app.get(mount(path), adapt(handler)) },
+      post: (path, handler) => { app.post(mount(path), adapt(handler)) },
     }
     p.plugin.routes(router, p.ctx)
   }

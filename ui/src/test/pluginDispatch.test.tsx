@@ -17,7 +17,10 @@ vi.mock('../plugins.generated', () => {
 import { SessionListPage } from '../routes/SessionListPage'
 import { SessionDetailPage } from '../routes/SessionDetailPage'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url.endsWith('/api/sessions')) return { ok: true, status: 200, json: async () => [{ id: 's1', label: null, first_ts: 0, last_ts: 0, duration_ms: 0, status: 'idle', event_count: 0, error_count: 0, warn_count: 0, sources: [], types: ['hello'] }] }

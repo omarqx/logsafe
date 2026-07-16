@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, afterAll } from 'vitest'
 import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { FlatLogView } from '../components/FlatLogView'
 import { _setEventSourceFactoryForTests } from '../hooks/useEventStream'
 import type { SessionSummary } from '../api'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 // jsdom has no EventSource; useEventStream opens one for the live tail as
 // soon as the initial page load resolves (see useEventStream.ts), which
@@ -27,8 +30,15 @@ _setEventSourceFactoryForTests(() => new NoopEventSource() as unknown as EventSo
 // matter how many rows exist — a standard jsdom + virtualized-list testing
 // workaround is to stub a non-zero size so the range calculation actually
 // produces rows to assert on.
+const origOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+const origOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
 Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 })
 Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 800 })
+
+afterAll(() => {
+  if (origOffsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', origOffsetHeight)
+  if (origOffsetWidth) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', origOffsetWidth)
+})
 
 const session: SessionSummary = {
   id: 's1', label: 'x', first_ts: 0, last_ts: 1, duration_ms: 1, status: 'idle',
