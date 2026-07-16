@@ -1,0 +1,12 @@
+{
+  "name": "logsafe-plugin-http",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { "./server": "./server.ts", "./ui": "./ui.tsx" },
+  "peerDependencies": { "@coglet/logsafe-plugin-sdk": "*", "react": "^19" },
+  "logsafe": {
+    "id": "http", "version": "0.1.0", "apiVersion": "1",
+    "ownedTypes": ["http"], "priority": 5,
+    "server": "./server.ts", "ui": "./ui.tsx"
+  }
+}
