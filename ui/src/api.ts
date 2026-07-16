@@ -100,15 +100,25 @@ export function exportUrl(id: string, params: URLSearchParams): string {
 
 export type PluginFetch = <T = unknown>(path: string, init?: RequestInit) => Promise<T>
 
+// Cache one fetcher per plugin id: makePluginFetch is called inline during
+// render (list rows, detail dispatch), and plugin components legitimately put
+// the returned function in useEffect dependency arrays — a fresh identity per
+// call would re-fire those effects on every parent re-render.
+const pluginFetchCache = new Map<string, PluginFetch>()
+
 /** Scoped fetch to /api/plugins/<id>/… returning parsed JSON. */
 export function makePluginFetch(pluginId: string): PluginFetch {
+  const cached = pluginFetchCache.get(pluginId)
+  if (cached) return cached
   const base = `/api/plugins/${encodeURIComponent(pluginId)}`
-  return async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
+  const fetcher = (async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
     const rel = path.startsWith('/') ? path : `/${path}`
     const res = await fetch(`${base}${rel}`, init)
     await assertOk(res, `plugin ${pluginId} fetch ${path}`)
     return res.json() as Promise<T>
-  }
+  }) as PluginFetch
+  pluginFetchCache.set(pluginId, fetcher)
+  return fetcher
 }
 
 /** The core query client, bundled for the plugin runtime context. */

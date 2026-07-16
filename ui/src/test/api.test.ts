@@ -169,6 +169,11 @@ describe('api additions', () => {
     globalThis.fetch = orig
     expect(calls[0]).toBe('/api/plugins/psdk/views')
   })
+
+  it('returns a stable fetcher per plugin id (safe for useEffect deps)', () => {
+    expect(makePluginFetch('psdk')).toBe(makePluginFetch('psdk'))
+    expect(makePluginFetch('psdk')).not.toBe(makePluginFetch('other'))
+  })
 })
 
 describe('purgeEvents', () => {
