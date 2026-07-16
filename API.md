@@ -10,6 +10,8 @@
 >   /v1/log` accepts an optional `type` field; the route namespace
 >   `/api/plugins/<id>/*` is reserved for plugins. No existing field semantics
 >   change.
+> - 2026-07-15: added DELETE /api/sessions/:id/events?through_seq= (purge).
+>   Existing routes/shapes unchanged.
 
 Base URL: `http://127.0.0.1:4600` (default; see `README.md#configuration`).
 All responses are `application/json` unless noted otherwise. CORS is
@@ -23,6 +25,7 @@ permissive (any origin may call this API — it's a local debugging tool).
 - [`GET /api/sessions/:id/export.ndjson`](#get-apisessionsidexportndjson) — bulk export
 - [`GET /api/sessions/:id/stream`](#get-apisessionsidstream) — live SSE tail
 - [`DELETE /api/sessions/:id`](#delete-apisessionsid) — delete a session
+- [`DELETE /api/sessions/:id/events`](#delete-apisessionsidevents) — purge events through a seq
 
 ---
 
@@ -285,6 +288,48 @@ Deletes the session and all of its events.
 
 - `204` — deleted, empty body.
 - `404` — `{"error": "session not found"}`, no events deleted.
+
+---
+
+## `DELETE /api/sessions/:id/events?through_seq=N`
+
+Purges (hard-deletes) events, unlike the soft `after_seq` view-floor the UI
+also offers — this permanently removes rows.
+
+Deletes every event in the session with `seq <= through_seq`, then
+recomputes the session's summary from the survivors, in one transaction.
+
+- `through_seq` is **inclusive**. It's deliberately named `through_seq`, not
+  `before_seq`, to avoid confusion with the query API's exclusive
+  `before_seq` filter above — a destructive operation gets
+  self-documenting, unambiguous naming. `through_seq=N` deletes exactly
+  what a view floor of `after_seq=N` would hide.
+- Recomputed fields (from the surviving events only): `event_count`,
+  `error_count`, `warn_count`, `first_ts` (min `ts`), `last_ts` (max `ts`),
+  `sources` (distinct, sorted). `label` is left unchanged.
+- **If no events survive, the session row is deleted too** — a session
+  with zero events isn't representable (`first_ts`/`last_ts` are `NOT
+  NULL`), and this matches `DELETE /api/sessions/:id` semantics.
+- `seq` is `AUTOINCREMENT` and never reused, so a purge can never cause an
+  `after_seq` cursor (from `events`, `export.ndjson`, or `stream`) to
+  replay the wrong events — only fewer of them.
+
+| Query param | Type | Required |
+|---|---|---|
+| `through_seq` | number | **yes** |
+
+### Response
+
+| Code | Body |
+|---|---|
+| `200` | `{ "deleted": number, "session": SessionSummary \| null }` — `deleted` is the row count removed; `session` is the updated summary, or `null` if the session was fully purged and its row deleted. |
+| `404` | `{"error": "session not found"}` — checked before any deletion happens. |
+| `400` | `{"error": "..."}` — `through_seq` missing, non-numeric, or non-finite. |
+
+```bash
+curl -s -X DELETE 'localhost:4600/api/sessions/s1/events?through_seq=42'
+# {"deleted":42,"session":{"id":"s1","label":null,"first_ts":..., ...}}
+```
 
 ---
 

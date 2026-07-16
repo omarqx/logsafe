@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { listSessions, getSession, fetchEventsPage, deleteSession, exportUrl, makePluginFetch, type SessionSummary, type StoredEvent } from '../api'
+import {
+  listSessions,
+  getSession,
+  fetchEventsPage,
+  deleteSession,
+  purgeEvents,
+  exportUrl,
+  makePluginFetch,
+  type SessionSummary,
+  type StoredEvent,
+} from '../api'
 import { filtersToApiParams } from '../lib/filters'
 
 const fetchMock = vi.fn()
@@ -158,5 +168,30 @@ describe('api additions', () => {
     await pf('views')
     globalThis.fetch = orig
     expect(calls[0]).toBe('/api/plugins/psdk/views')
+  })
+})
+
+describe('purgeEvents', () => {
+  it('DELETEs /api/sessions/:id/events?through_seq=N, url-encoded, and returns the parsed body', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ deleted: 3, session: SESSION }))
+    const result = await purgeEvents('s 1', 42)
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/s%201/events?through_seq=42', { method: 'DELETE' })
+    expect(result).toEqual({ deleted: 3, session: SESSION })
+  })
+
+  it('returns session: null when the purge removed the whole session', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ deleted: 5, session: null }))
+    const result = await purgeEvents('s1', 100)
+    expect(result).toEqual({ deleted: 5, session: null })
+  })
+
+  it('throws on non-2xx statuses (matches the file error style, no idempotent 404 handling)', async () => {
+    fetchMock.mockResolvedValue(emptyResponse(404))
+    await expect(purgeEvents('missing', 1)).rejects.toThrow('purgeEvents failed: 404')
+  })
+
+  it('throws on 400 (missing/non-finite through_seq server-side)', async () => {
+    fetchMock.mockResolvedValue(emptyResponse(400))
+    await expect(purgeEvents('s1', 1)).rejects.toThrow('purgeEvents failed: 400')
   })
 })

@@ -129,4 +129,49 @@ describe('query routes', () => {
     expect((await app.inject('/api/sessions/s1')).statusCode).toBe(404)
     expect((await app.inject({ method: 'DELETE', url: '/api/sessions/s1' })).statusCode).toBe(404)
   })
+
+  describe('DELETE /api/sessions/:id/events (purge)', () => {
+    it('200: deletes through seq and returns the updated session', async () => {
+      // fixture: seq1 token ok (api), seq2 login failed (api, error), seq3 render (webapp, session_label set)
+      const res = await app.inject({ method: 'DELETE', url: '/api/sessions/s1/events?through_seq=2' })
+      expect(res.statusCode).toBe(200)
+      const body = res.json()
+      expect(body.deleted).toBe(2)
+      expect(body.session).toMatchObject({ id: 's1', event_count: 1, error_count: 0, label: 'demo run' })
+
+      const remaining = await app.inject('/api/sessions/s1/events')
+      expect(remaining.json().events).toHaveLength(1)
+      expect(remaining.json().events[0].msg).toBe('render')
+    })
+
+    it('200: session: null when everything is purged', async () => {
+      const res = await app.inject({ method: 'DELETE', url: '/api/sessions/s1/events?through_seq=3' })
+      expect(res.statusCode).toBe(200)
+      expect(res.json()).toEqual({ deleted: 3, session: null })
+      expect((await app.inject('/api/sessions/s1')).statusCode).toBe(404)
+    })
+
+    it('404: unknown session, checked before any purge', async () => {
+      const res = await app.inject({ method: 'DELETE', url: '/api/sessions/nope/events?through_seq=5' })
+      expect(res.statusCode).toBe(404)
+      expect(res.json()).toEqual({ error: 'session not found' })
+      // s1 untouched
+      expect((await app.inject('/api/sessions/s1/events')).json().events).toHaveLength(3)
+    })
+
+    it('400: missing through_seq', async () => {
+      const res = await app.inject({ method: 'DELETE', url: '/api/sessions/s1/events' })
+      expect(res.statusCode).toBe(400)
+    })
+
+    it('400: garbage through_seq', async () => {
+      const res = await app.inject({ method: 'DELETE', url: '/api/sessions/s1/events?through_seq=notanumber' })
+      expect(res.statusCode).toBe(400)
+    })
+
+    it('does not affect the existing DELETE /api/sessions/:id route', async () => {
+      expect((await app.inject({ method: 'DELETE', url: '/api/sessions/s1' })).statusCode).toBe(204)
+      expect((await app.inject('/api/sessions/s1')).statusCode).toBe(404)
+    })
+  })
 })

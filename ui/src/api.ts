@@ -63,6 +63,20 @@ export async function deleteSession(id: string): Promise<void> {
   await assertOk(res, 'deleteSession')
 }
 
+/**
+ * Permanently deletes every event with `seq <= throughSeq` (inclusive) and
+ * returns the recomputed session summary, or `session: null` if nothing
+ * survived (the session row itself was removed). No idempotent-404 handling
+ * like deleteSession — a purge that 404s means the caller's floor no longer
+ * makes sense (session already gone), which is a real error to surface.
+ */
+export async function purgeEvents(id: string, throughSeq: number): Promise<{ deleted: number; session: SessionSummary | null }> {
+  const sp = new URLSearchParams({ through_seq: String(throughSeq) })
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/events?${sp.toString()}`, { method: 'DELETE' })
+  await assertOk(res, 'purgeEvents')
+  return res.json() as Promise<{ deleted: number; session: SessionSummary | null }>
+}
+
 export async function fetchEventsPage(
   id: string,
   params: URLSearchParams,

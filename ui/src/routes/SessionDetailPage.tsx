@@ -5,7 +5,7 @@
 // detail view can compose it too (see Task 16 for the dispatcher that picks
 // between them).
 import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { getSession, coreApi, makePluginFetch, type SessionSummary } from '../api'
 import { formatDuration } from '../lib/time'
 import { FlatLogView } from '../components/FlatLogView'
@@ -62,7 +62,10 @@ export function SessionDetailPage() {
   const crumbbar = (
     <div className="crumbbar">
       <span className="crumb">
-        sessions / <b>{session?.label ?? id}</b>
+        <Link className="crumb-link" to="/">
+          sessions
+        </Link>{' '}
+        / <b>{session?.label ?? id}</b>
         {session?.label ? <> · {id}</> : null}
       </span>
       <div className="counts">

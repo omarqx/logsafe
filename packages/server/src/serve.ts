@@ -24,6 +24,11 @@ function envNumber(name: string, fallback: number): number {
 
 export async function serve(): Promise<void> {
   const PORT = envNumber('PORT', 4600)
+  // Bind loopback-only by default (safe). Override with LOGSAFE_HOST=0.0.0.0
+  // to accept log ingest from other hosts/containers (e.g. a dockerized app
+  // logging to the host). The /mcp endpoint keeps its own loopback-only guard
+  // regardless, so widening the bind opens ingest, not the agent interface.
+  const HOST = process.env.LOGSAFE_HOST ?? '127.0.0.1'
   const DB_PATH = process.env.LOGSAFE_DB ?? path.join(os.homedir(), '.logsafe', 'logsafe.db')
   const RETENTION_DAYS = envNumber('RETENTION_DAYS', 7)
 
@@ -64,7 +69,7 @@ export async function serve(): Promise<void> {
   safePrune()
   setInterval(safePrune, 3_600_000).unref()
 
-  const address = await app.listen({ host: '127.0.0.1', port: PORT })
-  console.log(`[logsafe] listening on ${address}  (db: ${DB_PATH}, retention: ${RETENTION_DAYS}d)`)
+  const address = await app.listen({ host: HOST, port: PORT })
+  console.log(`[logsafe] listening on ${address}  (bind: ${HOST}, db: ${DB_PATH}, retention: ${RETENTION_DAYS}d)`)
   console.log(`[logsafe] MCP endpoint: ${address}/mcp`)
 }
