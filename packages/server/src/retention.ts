@@ -4,7 +4,9 @@ const DAY_MS = 86_400_000
 
 /** Deletes whole sessions (never partial) whose last event is older than the
     cutoff. Returns the number of sessions removed. */
-export function pruneSessions(db: Db, retentionDays: number, now: number): number {
+export function pruneSessions(
+  db: Db, retentionDays: number, now: number, onDelete?: (sessionId: string) => void,
+): number {
   if (retentionDays <= 0) return 0
   const cutoff = now - retentionDays * DAY_MS
   const ids = (db.prepare('SELECT id FROM sessions WHERE last_ts < ?').all(cutoff) as { id: string }[]).map(
@@ -17,6 +19,7 @@ export function pruneSessions(db: Db, retentionDays: number, now: number): numbe
     for (const sid of sids) {
       delEvents.run(sid)
       delSession.run(sid)
+      onDelete?.(sid)
     }
   })
   run(ids)

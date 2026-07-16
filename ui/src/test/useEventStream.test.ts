@@ -67,6 +67,7 @@ function ev(overrides: Partial<StoredEvent> = {}): StoredEvent {
     msg: 'hi',
     ctx: null,
     trace: null,
+    type: 'log',
     ...overrides,
   }
 }

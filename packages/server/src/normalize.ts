@@ -12,6 +12,7 @@ export interface NormalizedEvent {
   ctx: string | null
   trace: string | null
   session_label: string | null
+  type: string
 }
 
 const LEVEL_SET = new Set<string>(LEVELS)
@@ -65,5 +66,6 @@ export function normalizeEvent(raw: unknown, now: number): NormalizedEvent | nul
     ctx: ctxValue === undefined || ctxValue === null ? null : JSON.stringify(ctxValue),
     trace: str(r.trace),
     session_label: str(r.session_label),
+    type: str(r.type) ?? 'generic',
   }
 }

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listSessions, deleteSession, type SessionSummary } from '../api'
-import { formatDuration, formatStarted } from '../lib/time'
-import { sourceColorIndex } from '../lib/sources'
+import { listSessions, deleteSession, coreApi, makePluginFetch, type SessionSummary } from '../api'
+import { DefaultSessionRow } from '../components/DefaultSessionRow'
 import { isModifierKeyEvent } from '../lib/keyboard'
+import { uiPlugins } from '../plugins.generated'
+import { buildRegistry, resolveViewOwner } from '../plugins/registry'
 
 const REFRESH_MS = 5000
 const LOGSAFE_VERSION = 'v0.1.0'
+const registry = buildRegistry(uiPlugins)
 
 function isActiveElementEditable(): boolean {
   const el = document.activeElement
@@ -124,47 +126,31 @@ export function SessionListPage() {
 
         {sessions !== null &&
           sessions.map((s) => {
-            const { time, day } = formatStarted(s.first_ts, now)
-            const isScratch = s.label === null
-            // Unlabeled sessions get a server-generated id like
-            // 'scratch-2026-07-13' (see normalize.ts#scratchSessionId) that's
-            // already a readable label, so fall back to it instead of
-            // inventing one — and skip the id sub-span when it would just
-            // repeat that same string.
-            const displayLabel = s.label ?? s.id
+            const owner = resolveViewOwner(s, registry)
+            if (owner?.ListRow) {
+              const Row = owner.ListRow
+              return (
+                <Row
+                  key={s.id}
+                  session={s}
+                  now={now}
+                  selected={s.id === selectedId}
+                  onOpen={() => navigate(`/s/${s.id}`)}
+                  onSelect={() => setSelectedId(s.id)}
+                  api={coreApi}
+                  pluginFetch={makePluginFetch(owner.type)}
+                />
+              )
+            }
             return (
-              <div
+              <DefaultSessionRow
                 key={s.id}
-                className={`row${s.id === selectedId ? ' selected' : ''}`}
-                onClick={() => {
-                  setSelectedId(s.id)
-                  navigate(`/s/${s.id}`)
-                }}
-              >
-                <span className={`status ${s.status}`}>●</span>
-                <span className="when">
-                  <b>{time}</b> {day}
-                </span>
-                <span className={`label${isScratch ? ' scratch' : ''}`}>
-                  {displayLabel}
-                  {displayLabel !== s.id && <span className="id">{s.id}</span>}
-                </span>
-                <span className="srcs">
-                  {s.sources.map((src) => (
-                    <span key={src} className={`src src-${sourceColorIndex(s.sources, src)}`}>
-                      {src}
-                    </span>
-                  ))}
-                </span>
-                <span className="num count">{s.event_count.toLocaleString('en-US')}</span>
-                <span className={`errors ${s.error_count > 0 ? 'some' : 'zero'}`}>
-                  {s.error_count.toLocaleString('en-US')}
-                </span>
-                <span className={`warns${s.warn_count === 0 ? ' zero' : ''}`}>
-                  {s.warn_count.toLocaleString('en-US')}
-                </span>
-                <span className="dur">{formatDuration(s.duration_ms)}</span>
-              </div>
+                session={s}
+                now={now}
+                selected={s.id === selectedId}
+                onOpen={() => navigate(`/s/${s.id}`)}
+                onSelect={() => setSelectedId(s.id)}
+              />
             )
           })}
       </div>

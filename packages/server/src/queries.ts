@@ -6,6 +6,7 @@ export interface EventFilters {
   ns?: string
   level?: string
   source?: string
+  type?: string
   trace?: string
   q?: string
   from_ts?: number
@@ -43,6 +44,7 @@ interface EventRow {
   msg: string
   ctx: string | null
   trace: string | null
+  type: string
 }
 
 function rowToEvent(row: EventRow): StoredEvent {
@@ -76,6 +78,13 @@ export function queryEvents(
     if (sourcesList.length > 0) {
       where.push(`source IN (${sourcesList.map(() => '?').join(',')})`)
       params.push(...sourcesList)
+    }
+  }
+  if (f.type) {
+    const types = csv(f.type)
+    if (types.length > 0) {
+      where.push(`type IN (${types.map(() => '?').join(',')})`)
+      params.push(...types)
     }
   }
   if (f.trace) {
@@ -116,6 +125,7 @@ export interface SessionSummary {
   error_count: number
   warn_count: number
   sources: string[]
+  types: string[]
 }
 
 interface SessionRow {
@@ -127,6 +137,7 @@ interface SessionRow {
   error_count: number
   warn_count: number
   sources: string
+  types: string
 }
 
 function rowToSession(row: SessionRow, now: number): SessionSummary {
@@ -141,6 +152,7 @@ function rowToSession(row: SessionRow, now: number): SessionSummary {
     error_count: row.error_count,
     warn_count: row.warn_count,
     sources: JSON.parse(row.sources),
+    types: JSON.parse(row.types),
   }
 }
 
@@ -158,10 +170,11 @@ export function getSession(db: Db, id: string, now: number): SessionSummary | nu
   return row ? rowToSession(row, now) : null
 }
 
-export function deleteSession(db: Db, id: string): boolean {
+export function deleteSession(db: Db, id: string, onDelete?: (sessionId: string) => void): boolean {
   const run = db.transaction((sid: string): boolean => {
     db.prepare('DELETE FROM events WHERE session_id = ?').run(sid)
     const res = db.prepare('DELETE FROM sessions WHERE id = ?').run(sid)
+    if (res.changes > 0) onDelete?.(sid)
     return res.changes > 0
   })
   return run(id)

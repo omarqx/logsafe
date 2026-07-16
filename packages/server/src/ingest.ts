@@ -12,20 +12,21 @@ export interface StoredEvent {
   msg: string
   ctx: unknown
   trace: string | null
+  type: string
 }
 
 export function insertBatch(db: Db, events: NormalizedEvent[]): StoredEvent[] {
   if (events.length === 0) return []
 
   const insertEvent = db.prepare(`
-    INSERT INTO events (session_id, ts, received_at, source, ns, level, msg, ctx, trace)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO events (session_id, ts, received_at, source, ns, level, msg, ctx, trace, type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
   const ensureSession = db.prepare(`
     INSERT INTO sessions (id, first_ts, last_ts) VALUES (?, ?, ?)
     ON CONFLICT(id) DO NOTHING
   `)
-  const getSession = db.prepare('SELECT sources FROM sessions WHERE id = ?')
+  const getSession = db.prepare('SELECT sources, types FROM sessions WHERE id = ?')
   const updateSession = db.prepare(`
     UPDATE sessions SET
       label = coalesce(?, label),
@@ -34,7 +35,8 @@ export function insertBatch(db: Db, events: NormalizedEvent[]): StoredEvent[] {
       event_count = event_count + ?,
       error_count = error_count + ?,
       warn_count = warn_count + ?,
-      sources = ?
+      sources = ?,
+      types = ?
     WHERE id = ?
   `)
 
@@ -49,8 +51,9 @@ export function insertBatch(db: Db, events: NormalizedEvent[]): StoredEvent[] {
 
     for (const [sessionId, list] of bySession) {
       ensureSession.run(sessionId, list[0].ts, list[0].ts)
-      const row = getSession.get(sessionId) as { sources: string }
+      const row = getSession.get(sessionId) as { sources: string; types: string }
       const sources = new Set<string>(JSON.parse(row.sources))
+      const types = new Set<string>(JSON.parse(row.types))
 
       let label: string | null = null
       let minTs = Infinity
@@ -60,12 +63,13 @@ export function insertBatch(db: Db, events: NormalizedEvent[]): StoredEvent[] {
 
       for (const e of list) {
         sources.add(e.source)
+        types.add(e.type)
         if (e.session_label !== null) label = e.session_label
         if (e.level === 'error') errors++
         if (e.level === 'warn') warns++
         if (e.ts < minTs) minTs = e.ts
         if (e.ts > maxTs) maxTs = e.ts
-        const res = insertEvent.run(e.session_id, e.ts, e.received_at, e.source, e.ns, e.level, e.msg, e.ctx, e.trace)
+        const res = insertEvent.run(e.session_id, e.ts, e.received_at, e.source, e.ns, e.level, e.msg, e.ctx, e.trace, e.type)
         stored.push({
           seq: Number(res.lastInsertRowid),
           session_id: e.session_id,
@@ -77,10 +81,12 @@ export function insertBatch(db: Db, events: NormalizedEvent[]): StoredEvent[] {
           msg: e.msg,
           ctx: e.ctx === null ? null : JSON.parse(e.ctx),
           trace: e.trace,
+          type: e.type,
         })
       }
 
-      updateSession.run(label, minTs, maxTs, list.length, errors, warns, JSON.stringify([...sources].sort()), sessionId)
+      updateSession.run(label, minTs, maxTs, list.length, errors, warns,
+        JSON.stringify([...sources].sort()), JSON.stringify([...types].sort()), sessionId)
     }
     return stored
   })

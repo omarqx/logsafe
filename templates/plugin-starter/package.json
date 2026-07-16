@@ -1,0 +1,12 @@
+{
+  "name": "logsafe-plugin-my-plugin",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": { "./server": "./server.ts", "./ui": "./ui.tsx" },
+  "peerDependencies": { "@coglet/logsafe-plugin-sdk": "*", "react": "^19" },
+  "logsafe": {
+    "id": "my-plugin", "version": "0.0.1", "apiVersion": "1",
+    "ownedTypes": ["my-plugin"], "priority": 1,
+    "server": "./server.ts", "ui": "./ui.tsx"
+  }
+}

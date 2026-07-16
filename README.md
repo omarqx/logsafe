@@ -211,6 +211,13 @@ cp -r packages/server/skills/debugging-with-logsafe ~/.claude/skills/
 
 (For Cursor, paste the SKILL.md body into a project rule instead.)
 
+## Plugins
+
+logsafe can be extended with plugins that add new log types, server-side
+hooks, and a custom UI for the sessions that carry them.
+
+- **[Writing plugins](docs/PLUGINS.md)** — extend logsafe with your own log types, server hooks, and custom UI (see `examples/plugin-http` and `templates/plugin-starter`).
+
 ## Configuration
 
 Environment variables, read at server startup (`npm start`):

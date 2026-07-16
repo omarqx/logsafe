@@ -6,6 +6,9 @@ import { normalizeEvent, type NormalizedEvent } from './normalize.js'
 import { insertBatch, type StoredEvent } from './ingest.js'
 import { queryEvents, listSessions, getSession, deleteSession, purgeEventsThrough, type EventFilters } from './queries.js'
 import { SseHub } from './sse.js'
+import type { LoadedServerPlugin } from './plugins/loader.js'
+import { classifyAndTransform, runAfterInsert } from './plugins/pipeline.js'
+import { mountPluginRoutes } from './plugins/router.js'
 
 export const MAX_BATCH = 1000
 export const BODY_LIMIT = 5 * 1024 * 1024
@@ -13,6 +16,7 @@ export const BODY_LIMIT = 5 * 1024 * 1024
 export interface AppOptions {
   db: Db
   now?: () => number
+  plugins?: LoadedServerPlugin[]
 }
 
 function num(v: unknown): number | undefined {
@@ -30,6 +34,7 @@ function parseFilters(q: Record<string, unknown>): EventFilters {
     ns: str(q.ns),
     level: str(q.level),
     source: str(q.source),
+    type: str(q.type),
     trace: str(q.trace),
     q: str(q.q),
     from_ts: num(q.from_ts),
@@ -40,10 +45,23 @@ function parseFilters(q: Record<string, unknown>): EventFilters {
   }
 }
 
-export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
+export function buildApp({ db, now = Date.now, plugins = [] }: AppOptions): FastifyInstance {
   const app = Fastify({ bodyLimit: BODY_LIMIT })
 
   app.register(cors, { origin: true })
+
+  // Core deletion must succeed even if a plugin's cleanup throws; isolate
+  // each plugin call so one bad plugin can't roll back the whole DELETE.
+  // Orphaned plugin rows keyed by the deleted session_id are harmless.
+  const notifyPluginsDelete = (sessionId: string): void => {
+    for (const p of plugins) {
+      try {
+        p.plugin.onSessionDelete?.(sessionId, p.ctx)
+      } catch (err) {
+        console.error(`[logsafe] plugin "${p.manifest.id}" onSessionDelete failed: ${(err as Error).message}`)
+      }
+    }
+  }
 
   // Be maximally accepting about content types: bare `curl -d` sends
   // x-www-form-urlencoded, sendBeacon sends text/plain — parse any body as JSON.
@@ -85,9 +103,10 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
       const good: NormalizedEvent[] = []
       for (const raw of body) {
         const ev = normalizeEvent(raw, t)
-        if (ev) good.push(ev)
+        if (ev) good.push(classifyAndTransform(ev, raw as Record<string, unknown>, plugins))
       }
       const stored = insertBatch(db, good)
+      runAfterInsert(stored, plugins)
       afterInsert(stored)
       return reply.code(202).send({ accepted: good.length, rejected: body.length - good.length })
     }
@@ -95,7 +114,9 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     if (!ev) {
       return reply.code(400).send({ error: 'event must be an object with a non-empty string msg' })
     }
-    const stored = insertBatch(db, [ev])
+    const classified = classifyAndTransform(ev, body as Record<string, unknown>, plugins)
+    const stored = insertBatch(db, [classified])
+    runAfterInsert(stored, plugins)
     afterInsert(stored)
     return reply.code(202).send({ accepted: 1, rejected: 0 })
   })
@@ -155,7 +176,7 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
 
   app.delete('/api/sessions/:id', (req, reply) => {
     const { id } = req.params as { id: string }
-    if (!deleteSession(db, id)) return reply.code(404).send({ error: 'session not found' })
+    if (!deleteSession(db, id, notifyPluginsDelete)) return reply.code(404).send({ error: 'session not found' })
     return reply.code(204).send()
   })
 
@@ -166,6 +187,12 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     const throughSeq = num(q.through_seq)
     if (throughSeq === undefined) return reply.code(400).send({ error: 'through_seq must be a finite number' })
     const { deleted, sessionDeleted } = purgeEventsThrough(db, id, throughSeq)
+    // A purge that removed the last event deletes the session row too
+    // (purgeEventsThrough) — give plugins the same cleanup signal the
+    // DELETE-session route and retention prune send, so their per-session
+    // rows don't outlive the session. Partial purges keep the session, so
+    // plugin state (keyed by session_id) stays valid and nothing fires.
+    if (sessionDeleted) notifyPluginsDelete(id)
     return { deleted, session: sessionDeleted ? null : getSession(db, id, now()) }
   })
 
@@ -257,5 +284,6 @@ export function buildApp({ db, now = Date.now }: AppOptions): FastifyInstance {
     pending.length = 0
   })
 
+  mountPluginRoutes(app, plugins)
   return app
 }

@@ -15,6 +15,7 @@ function ev(overrides: Partial<StoredEvent> = {}): StoredEvent {
     msg: 'token refreshed',
     ctx: null,
     trace: null,
+    type: 'log',
     ...overrides,
   }
 }

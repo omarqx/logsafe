@@ -54,6 +54,12 @@ describe('queryEvents', () => {
     expect(queryEvents(db, 's1', { ns: 'auth:*', level: 'error' }).events).toHaveLength(1)
   })
 
+  it('filters events by type', () => {
+    const db = openDb(':memory:')
+    insertBatch(db, [normalizeEvent({ msg: 'a', session_id: 's', type: 'psdk' }, 1)!, normalizeEvent({ msg: 'b', session_id: 's' }, 1)!])
+    expect(queryEvents(db, 's', { type: 'generic' }).events.map((e) => e.msg)).toEqual(['b'])
+  })
+
   it('trace exact match', () => {
     const { events } = queryEvents(db, 's1', { trace: 't-1' })
     expect(events.map((e) => e.msg)).toEqual(['login failed', 'retry login'])
@@ -128,6 +134,16 @@ describe('sessions', () => {
     expect(listSessions(db, 50, -5, NOW)).toHaveLength(2)
     expect(listSessions(db, 2.5, 0, NOW)).toHaveLength(2)   // fractional must not throw
     expect(listSessions(db, 50, 0.5, NOW)).toHaveLength(2)
+  })
+})
+
+describe('queries: type surfaced', () => {
+  it('returns type on events and types[] on the session', () => {
+    const db = openDb(':memory:')
+    const ev = normalizeEvent({ msg: 'a', session_id: 's1', type: 'psdk' }, 5)!
+    insertBatch(db, [ev])
+    expect(queryEvents(db, 's1', {}).events[0].type).toBe('psdk')
+    expect(getSession(db, 's1', 10)!.types).toEqual(['psdk'])
   })
 })
 

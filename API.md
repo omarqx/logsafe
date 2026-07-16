@@ -5,6 +5,11 @@
 >
 > - 2026-07-14: project renamed deblog → logsafe. Routes, params, and shapes
 >   unchanged; only names in prose.
+> - 2026-07-14: plugin system (additive). `StoredEvent` gains `type: string`
+>   (default `"generic"`); `SessionSummary` gains `types: string[]`; `POST
+>   /v1/log` accepts an optional `type` field; the route namespace
+>   `/api/plugins/<id>/*` is reserved for plugins. No existing field semantics
+>   change.
 > - 2026-07-15: added DELETE /api/sessions/:id/events?through_seq= (purge).
 >   Existing routes/shapes unchanged.
 
@@ -43,6 +48,7 @@ valid JSON; invalid JSON returns `400`.
 | `session_id` | string | no | Non-empty string is used as-is. Missing/empty/non-string → a scratch id `scratch-YYYY-MM-DD` (UTC day bucket, from server receive time) — same-day events with no `session_id` land in the same session. |
 | `source` | string | no | Non-empty string used as-is; otherwise `"default"`. |
 | `ns` | string | no | Used as-is if a string; otherwise `""`. |
+| `type` | string | no | Non-empty string sets the event's type verbatim; otherwise a plugin matcher may claim it, else `"generic"`. Drives which plugin (if any) renders the session. |
 | `level` | `"debug" \| "info" \| "warn" \| "error"` | no | Exact (case-sensitive) match against those four values is stored as-is. Anything else (including absent) falls back to `"info"`, **except**: if `level` was present but not one of the four, the *original* value is preserved under `ctx._level` (see below). Absent `level` does not touch `ctx`. |
 | `ctx` | any JSON value, or omitted | no | Stored as JSON text, or `null`. Explicit `ctx: null` is stored and returned as `null` (not the string `"null"`, not dropped). See the level-coercion interaction below. |
 | `trace` | string | no | Non-empty string used as-is; otherwise `null`. |
@@ -148,6 +154,7 @@ Response: `200` — a JSON array of **SessionSummary**:
 | `error_count` | number | events with `level: "error"` |
 | `warn_count` | number | events with `level: "warn"` |
 | `sources` | string[] | distinct `source` values seen, alphabetically sorted |
+| `types` | string[] | Distinct event types present in the session, sorted. `["generic"]` for an ordinary session. |
 
 ---
 
@@ -211,6 +218,7 @@ Non-numeric/empty numeric params (`from_ts`, `to_ts`, `after_seq`,
 | `received_at` | number | Server receive time, epoch ms, for the batch this event arrived in. |
 | `source` | string | |
 | `ns` | string | |
+| `type` | string | Event type; `"generic"` unless set explicitly or by a plugin matcher. |
 | `level` | `"debug" \| "info" \| "warn" \| "error"` | |
 | `msg` | string | |
 | `ctx` | any JSON value \| null | Parsed (not a JSON string) — an object, array, scalar, or `null`. |
@@ -333,3 +341,5 @@ curl -s -X DELETE 'localhost:4600/api/sessions/s1/events?through_seq=42'
   delete-only.
 - Retention (automatic pruning of old sessions) is a server-side background
   job, not an API surface — see `README.md#configuration`.
+- `GET|POST /api/plugins/<id>/*` is owned by installed plugins, not core. Shapes
+  are defined by each plugin, not this contract.

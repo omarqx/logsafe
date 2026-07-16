@@ -5,6 +5,8 @@ import {
   fetchEventsPage,
   deleteSession,
   purgeEvents,
+  exportUrl,
+  makePluginFetch,
   type SessionSummary,
   type StoredEvent,
 } from '../api'
@@ -48,6 +50,7 @@ const SESSION: SessionSummary = {
   error_count: 0,
   warn_count: 0,
   sources: ['webapp'],
+  types: ['log'],
 }
 
 const EVENT: StoredEvent = {
@@ -61,6 +64,7 @@ const EVENT: StoredEvent = {
   msg: 'hi',
   ctx: null,
   trace: null,
+  type: 'log',
 }
 
 describe('listSessions', () => {
@@ -138,6 +142,37 @@ describe('deleteSession', () => {
   it('throws on other non-2xx statuses', async () => {
     fetchMock.mockResolvedValue(emptyResponse(500))
     await expect(deleteSession('s1')).rejects.toThrow('deleteSession failed: 500')
+  })
+})
+
+describe('api additions', () => {
+  it('builds an export url with params', () => {
+    expect(exportUrl('s 1', new URLSearchParams({ level: 'error' }))).toBe('/api/sessions/s%201/export.ndjson?level=error')
+  })
+
+  it('scopes pluginFetch to the plugin namespace', async () => {
+    const calls: string[] = []
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (url: string) => { calls.push(url); return { ok: true, status: 200, json: async () => ({ ok: 1 }) } }) as never
+    const pf = makePluginFetch('psdk')
+    await pf('/views/s1')
+    globalThis.fetch = orig
+    expect(calls[0]).toBe('/api/plugins/psdk/views/s1')
+  })
+
+  it('normalizes a pluginFetch path with no leading slash', async () => {
+    const calls: string[] = []
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (url: string) => { calls.push(url); return { ok: true, status: 200, json: async () => ({ ok: 1 }) } }) as never
+    const pf = makePluginFetch('psdk')
+    await pf('views')
+    globalThis.fetch = orig
+    expect(calls[0]).toBe('/api/plugins/psdk/views')
+  })
+
+  it('returns a stable fetcher per plugin id (safe for useEffect deps)', () => {
+    expect(makePluginFetch('psdk')).toBe(makePluginFetch('psdk'))
+    expect(makePluginFetch('psdk')).not.toBe(makePluginFetch('other'))
   })
 })
 
