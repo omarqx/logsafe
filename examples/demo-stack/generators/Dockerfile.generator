@@ -1,0 +1,7 @@
+FROM node:20-alpine
+WORKDIR /gen
+COPY *.mjs ./
+# SCRIPT chosen per-service in docker-compose.yml
+ARG SCRIPT
+ENV SCRIPT=${SCRIPT}
+CMD ["sh", "-c", "node ${SCRIPT}"]

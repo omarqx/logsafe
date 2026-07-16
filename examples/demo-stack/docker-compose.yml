@@ -1,0 +1,26 @@
+name: logsafe-demo
+
+services:
+  logsafe:
+    build:
+      context: ../..
+      dockerfile: examples/demo-stack/Dockerfile.logsafe
+    ports:
+      - "127.0.0.1:4600:4600"
+    volumes:
+      - logsafe-data:/data
+
+  gateway:
+    build: { context: ./generators, dockerfile: Dockerfile.generator, args: { SCRIPT: gateway.mjs } }
+    depends_on: { logsafe: { condition: service_healthy } }
+
+  worker:
+    build: { context: ./generators, dockerfile: Dockerfile.generator, args: { SCRIPT: worker.mjs } }
+    depends_on: { logsafe: { condition: service_healthy } }
+
+  webapp:
+    build: { context: ./generators, dockerfile: Dockerfile.generator, args: { SCRIPT: webapp.mjs } }
+    depends_on: { logsafe: { condition: service_healthy } }
+
+volumes:
+  logsafe-data:

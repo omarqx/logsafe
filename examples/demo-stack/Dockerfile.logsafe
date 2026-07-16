@@ -1,0 +1,19 @@
+# Build context = repo root (see docker-compose.yml). node:22-slim (glibc)
+# so better-sqlite3 installs from prebuilds. (better-sqlite3@12.x only
+# publishes prebuilt binaries for Node ABI v127+ / Node 22+ — Node 20 has
+# no prebuild and the slim image lacks build tools to compile from source.)
+FROM node:22-slim
+WORKDIR /app
+COPY . .
+COPY examples/demo-stack/logsafe.config.json /app/logsafe.config.json
+RUN npm ci
+# plugins:sync reads /app/logsafe.config.json and bakes both example plugins
+# into the UI bundle; build:ui runs it first.
+RUN npm run build:ui
+ENV LOGSAFE_HOST=0.0.0.0 \
+    LOGSAFE_DB=/data/logsafe.db \
+    PORT=4600
+EXPOSE 4600
+HEALTHCHECK --interval=5s --timeout=3s --retries=12 \
+  CMD node -e "fetch('http://127.0.0.1:4600/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["npx", "tsx", "packages/server/src/cli.ts"]
