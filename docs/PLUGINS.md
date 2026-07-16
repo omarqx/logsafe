@@ -79,8 +79,8 @@ A session's list row and detail view are rendered by its **view owner**: the
 first **installed** plugin (ordered by `priority`, then registry order) whose
 `UIPlugin.type` is in `session.types`; no match → the flat view.
 `resolveViewOwner(session, registry)` (`ui/src/plugins/registry.ts`) is a
-pure function of `session.types` + the installed UI registry, computed
-identically server- and client-side. If your plugin owns several types
+pure function of `session.types` + the installed UI registry — it runs only
+in the SPA; the server has no view concept. If your plugin owns several types
 server-side, its UI still registers under the single `UIPlugin.type`; sessions
 carrying only your other types fall back to the flat view. A mixed session
 (`types: ["generic", "http"]`) opens the `http` plugin's detail view even
