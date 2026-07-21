@@ -51,6 +51,7 @@ function renderDetail() {
 describe('plugin-jobs UI', () => {
   it('conforms to the contract and resolves for job sessions', () => {
     expect(jobsUi.type).toBe('job')
+    expect(jobsUi.id).toBe('jobs') // routes mount by id — pluginFetch must be scoped by it
     const reg = buildRegistry([jobsUi])
     expect(resolveViewOwner(session(['generic', 'job']), reg)).toBe(jobsUi)
     expect(resolveViewOwner(session(['generic']), reg)).toBeUndefined()

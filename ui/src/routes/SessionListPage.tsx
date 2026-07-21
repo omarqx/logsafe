@@ -138,7 +138,7 @@ export function SessionListPage() {
                   onOpen={() => navigate(`/s/${s.id}`)}
                   onSelect={() => setSelectedId(s.id)}
                   api={coreApi}
-                  pluginFetch={makePluginFetch(owner.type)}
+                  pluginFetch={makePluginFetch(owner.id ?? owner.type)}
                 />
               )
             }

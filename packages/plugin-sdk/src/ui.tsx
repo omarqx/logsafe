@@ -83,7 +83,12 @@ export interface DetailViewProps {
 }
 
 export interface UIPlugin {
+  /** The session type this plugin's views render (view-owner matching). */
   type: string
+  /** The manifest plugin id — scopes the `pluginFetch` prop to
+   *  `/api/plugins/<id>/`. REQUIRED when it differs from `type` (routes are
+   *  mounted by id, not type); defaults to `type` when omitted. */
+  id?: string
   ListRow?: ComponentType<ListRowProps>
   DetailView?: ComponentType<DetailViewProps>
 }
