@@ -102,7 +102,7 @@ export function SessionDetailPage() {
           session={session}
           sessionId={id}
           api={coreApi}
-          pluginFetch={makePluginFetch(owner.type)}
+          pluginFetch={makePluginFetch(owner.id ?? owner.type)}
           urlState={{ params, setParams }}
           tokens={logsafeRuntime.tokens}
         />

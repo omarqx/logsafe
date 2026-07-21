@@ -361,6 +361,15 @@ const summary = await pluginFetch<Summary>(`/summary/${encodeURIComponent(sessio
 // equivalent: pluginFetch<Summary>(`summary/${encodeURIComponent(sessionId)}`)
 ```
 
+**If your `UIPlugin.type` differs from your manifest `id`** (e.g. plugin-jobs:
+type `job`, id `jobs`), you MUST set `id` on the `UIPlugin` export — routes
+are mounted by id, and core scopes the `pluginFetch` prop with
+`plugin.id ?? plugin.type`:
+
+```ts
+const plugin: UIPlugin = { type: 'job', id: 'jobs', ListRow, DetailView }
+```
+
 ### Theming
 
 Don't hardcode colors — read them from the `tokens` prop (`DetailViewProps.tokens`,

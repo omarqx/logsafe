@@ -97,5 +97,5 @@ function JobsDetailView({ session, sessionId, pluginFetch, tokens }: DetailViewP
   )
 }
 
-const plugin: UIPlugin = { type: 'job', ListRow: JobsListRow, DetailView: JobsDetailView }
+const plugin: UIPlugin = { type: 'job', id: 'jobs', ListRow: JobsListRow, DetailView: JobsDetailView }
 export default plugin
